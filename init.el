@@ -1,41 +1,13 @@
 ; -*- coding: utf-8 orgstruct-heading-prefix-regexp: ";;; "; -*-
 
-;;; * Initialization
-(setq inhibit-splash-screen t)       ; Don't want splash screen.
-(setq inhibit-startup-message t)     ; Don't want any startup message.
-(scroll-bar-mode 0 )                 ; Turn off scrollbars.
-(tool-bar-mode 0)                    ; Turn off toolbars.
-(fringe-mode 0)                      ; Turn off left and right fringe cols.
-(size-indication-mode)               ; Show file size in status line.
-(put 'dired-find-alternate-file 'disabled nil)
-(mouse-avoidance-mode 'exile)        ; Move mouse pointer out of way of cursor.
-(setq visible-bell 1)                ; Turn off sound.
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;;*Initialization
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-(add-to-list 'default-frame-alist '(fullscreen . maximized));;开启emacs，窗口设置为最大化
-;; No menus, but can turn back on with keypress.
-(menu-bar-mode 0)
-(global-set-key (kbd "<C-M-f2>") 'menu-bar-mode)
-
-;;fix chinese coding  解决中文字体显示为乱码 方框数字
- ;;(set-fontset-font "fontset-default"'gb18030' ("Microsoft YaHei" . "unicode-bmp"))
- (set-default-font "-outline-微软雅黑-normal-normal-normal-sans-21-*-*-*-p-*-iso8859-1")
- 
- ;;光标改为竖线形式
- ;;(setq-default cursor-type 'bar)
  
 (setq confirm-nonexistent-file-or-buffer nil)
-(fset 'yes-or-no-p 'y-or-n-p)        ; Change yes/no questions to y/n type.
-(setq default-input-method 'TeX)     ; For C-\.
 
-;; For packages I've downloaded.
-;;(add-to-list 'load-path "~/Dropbox/elisp")
 
-;; (if (version< emacs-version "25.0")
-;;      ;; Now included in Emacs 25.
-;;       (use-package seq
-;;         :load-path "~/dropbox/elisp/old/seq"
-;;       )
-;; )
 
 ;; Next line necessary after 10-12-17 package update.  let-alist was
 ;; downloaded as a dependency but seems we need to load it.
@@ -44,8 +16,11 @@
 (require 'seq)
 (require 'cl)  ;; Temporary: to get loop macro, needed just below.
                ;; I think cl is automaticaly loaded by something else.
+			   
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;;* Package initialization & package sources
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-;;; * Package initialization
 (require 'package)
 (setq package-archives
       '(
@@ -58,18 +33,38 @@
 ;; http://batsov.com/articles/2012/02/19/package-management-in-emacs-the-good-the-bad-and-the-ugly/
 ;; http://y.tsutsumi.io/emacs-from-scratch-part-2-package-management.html
 (defvar required-packages
-  '(ace-jump-buffer ace-jump-mode ace-jump-zap ace-link ace-window anzu auctex
+  '(ace-jump-buffer ace-jump-mode ace-jump-zap ace-link ace-window anzu 
+     auctex     
     auctex-latexmk bind-key
-    browse-kill-ring bug-hunter  clippy counsel dash define-word deft diminish
+    browse-kill-ring bug-hunter clippy counsel dash define-word deft diminish
     ;;dired-quick-sort edit-server elfeed elfeed-goodies expand-region
     git-timemachine helm helm-bibtex hydra ibuffer-vc imenu-anywhere ivy
     latex-extra macrostep magit matlab-mode ox-pandoc ripgrep
     s shrink-whitespace shell-pop smex swiper switch-window
-    use-package wc-mode wgrep which-key wrap-region   )
+    use-package wc-mode wgrep which-key wrap-region yasnippet)
   "A list of packages to ensure are installed at launch.")
 
-(setq use-package-enable-imenu-support t)
-(setq use-package-verbose t)  ;; Show package load times.
+  
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;; * Add my elisp directory and other files
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+;;from n j higham
+;; For packages I've downloaded.
+;;(add-to-list 'load-path "~/Dropbox/elisp")
+;; (if (version< emacs-version "25.0")
+;;      ;; Now included in Emacs 25.
+;;       (use-package seq
+;;         :load-path "~/dropbox/elisp/old/seq"
+;;       )
+;; )
+
+;;Sometimes I load files outside the package system. As long as they're in a directory in my load-path, Emacs can find them.
+;;http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed
+(add-to-list 'load-path "~/.emacs.d/lisp")
+
+;;(setq use-package-enable-imenu-support t)
+(setq use-package-verbose t)  ;; Show package load times.if the package takes longer than 0.1s to load, you will see a message.以便调整设置，加快启动 
 (setq use-package-compute-statistics  t)  ;; 想查看已加载的软件包数量，它们已达到的初始化阶段以及它们花费的总时间（大致）.
 (defun required-packages-installed-p ()
   (loop for p in required-packages
@@ -88,25 +83,31 @@
 
 ;; Recommended way to load use-package.
 ;; (add-to-list 'load-path "~/Dropbox/elisp/use-package-master")
-(eval-when-compile
-  (setq use-package-enable-imenu-support t)
-  (require 'use-package))
+(unless (package-installed-p 'use-package)
+  (package-install 'use-package))
 (require 'diminish)
 (require 'bind-key)
-(setq use-package-verbose t)
-;; -----------------------------------------------------------------
+
+
+;;https://github.com/emacscollective/auto-compile
+(use-package auto-compile             ;;Automatically compile Emacs Lisp libraries
+  :ensure t 
+  :config (auto-compile-on-load-mode))
+ (setq load-prefer-newer t)          ;;these modes guarantee that Emacs never loads outdated byte code files.
+
 (bind-key* "C-z" 'scroll-up-keep-cursor)
 
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;; * Load secrets
+;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;I keep slightly more sensitive information in a separate file so that I can easily publish my main configuration.
+(load "~/.emacs.secrets" t)
 
-;;; Packages
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;; * Packages
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-(use-package which-key
-  ;; :load-path "~/dropbox/elisp/which-key"
-  :config
-  ;; (setq guide-key/highlight-command-regexp "rectangle")
-  (which-key-mode)
-  (which-key-setup-minibuffer)
-)
+
 
 ;; http://endlessparentheses.com/debug-your-emacs-init-file-with-the-bug-hunter.html
 ;; M-x bug-hunter-file [gives error about auctex].
@@ -114,7 +115,10 @@
   ;; :load-path "~/dropbox/elisp/elisp-bug-hunter"
 )
 
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ;;; * System identification
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 ;; Name went from all caps in <= 24.4 to upper/lower case in 24.5.
 ;; In 24.5 the variable is superseded by a function.  Change later.
 (defun system-is-mac ()
@@ -166,7 +170,19 @@
 "Return true if the system we are running on iMac"
 (string-equal system-name "Nick-iMac.local"))
 
-;;; * Backups
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;; * General configuration
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+;-------------------------------------------------------Libraries ---------------------------------------------------------------------------------------------
+;;Neatly load some packages 
+;; Dash is needed by ace-jump-buffer and wrap-region.If :defer on next line then ace-jump-buffer doesn't work.
+(use-package dash) ;;                    :load-path "~/dropbox/elisp/dash")
+(use-package s ) ;;          :defer t    :load-path "~/Dropbox/elisp/s") The long lost Emacs string manipulation library.
+
+
+;------------------------------------------------------ Backups --------------------------------------------------------------------------------------------  
+;;有点啰嗦，抽空简化。可参考http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed
 
 ;; http://stackoverflow.com/questions/151945/how-do-i-control-how-emacs-makes-backup-files
 (setq delete-old-versions t ; delete excess backup files silently
@@ -210,6 +226,183 @@
           `((".*" , "~/emacs_backups/" t)))
 ))
 
+;---------------------------------------------------------------- History --------------------------------------------------------------------------------
+;;From http://www.wisdomandwonder.com/wp-content/uploads/2014/03/C3F.html
+(setq savehist-file "~/.emacs.d/savehist")
+(savehist-mode 1)
+(setq history-length t)
+(setq history-delete-duplicates t)
+(setq savehist-save-minibuffer-history 1)
+(setq savehist-additional-variables
+      '(kill-ring
+        search-ring
+        regexp-search-ring))
+
+;------------------------------------------------------------Windows Configuration------------------------------------------------------------------ drill
+(setq inhibit-splash-screen t)       ; Don't want splash screen.
+(setq inhibit-startup-message t)     ; Don't want any startup message.
+(scroll-bar-mode 0 )                 ; Turn off scrollbars.
+;(tool-bar-mode 0)                    ; Turn off toolbars. (Although I changed my mind about the menu - I want that again. -----sacha chua)
+(fringe-mode 0)                      ; Turn off left and right fringe cols.
+(size-indication-mode)               ; Show file size in status line.
+(put 'dired-find-alternate-file 'disabled nil)
+(mouse-avoidance-mode 'exile)        ; Move mouse pointer out of way of cursor.
+(setq visible-bell 1)                ; Turn off sound.
+(menu-bar-mode 0)                   ; No menus, but can turn back on with keypress.
+(global-set-key (kbd "<C-M-f2>") 'menu-bar-mode)
+(display-time-mode 1)              ;Time in the modeline   the clock 
+
+;----------------------------------------------------Winner mode - undo and redo window configuration--------------------------------------------------------
+;;winner-mode lets you use C-c <left> and C-c <right> to switch between window configurations. 
+;;This is handy when something has popped up a buffer that you want to look at briefly before returning to whatever you were working on. 
+;;When you're done, press C-c <left>.
+(use-package winner
+  :defer t)
+
+;; ----------------Helm - interactive completion ------------------------------------------------
+;;from  http://pages.sachachua.com/.emacs.d/Sacha.html#unnumbered-14    
+;; http://writequit.org/org/settings.html#sec-1-34
+(use-package helm
+  :diminish helm-mode
+  :init
+  (progn
+    (require 'helm-config)
+    (setq helm-candidate-number-limit 100)
+    ;; From https://gist.github.com/antifuchs/9238468
+    (setq helm-idle-delay 0.0 ; update fast sources immediately (doesn't).
+          helm-input-idle-delay 0.01  ; this actually updates things
+                                        ; reeeelatively quickly.
+          helm-yas-display-key-on-candidate t
+          helm-quick-update t
+          helm-M-x-requires-pattern nil
+          helm-ff-skip-boring-files t)
+    (helm-mode))
+  :bind (("C-c h" . helm-mini)
+         ("C-h a" . helm-apropos)
+         ("C-x C-b" . helm-buffers-list)
+         ("C-x b" . helm-buffers-list)
+         ("M-y" . helm-show-kill-ring)
+         ("M-x" . helm-M-x)
+         ("C-x c o" . helm-occur)
+         ("C-x c s" . helm-swoop)
+         ("C-x c y" . helm-yas-complete)
+         ("C-x c Y" . helm-yas-create-snippet-on-region)
+         ("C-x c b" . my/helm-do-grep-book-notes)
+         ("C-x c SPC" . helm-all-mark-rings)))
+(ido-mode -1) ;; Turn off ido mode in case I enabled it accidentally
+
+ ;; ---------------------------helm-bibtex--------------------------------------
+;; The requires are not needed now I'm installing helm-bibtex from Melpa.
+;; Next two are required in helm-bibtex.
+;; (require 'f)
+;; (require 'parsebib)
+;; Next line needed only so 'bibtex-completion-open-pdf is known for C-c p.
+(require 'helm-bibtex)
+;; (setq helm-bibtex-bibliography
+(setq bibtex-completion-bibliography
+      '("~/texmf/bibtex/bib/la.bib"
+        "~/texmf/bibtex/bib/misc.bib"
+        "~/texmf/bibtex/bib/njhigham.bib"
+        "~/texmf/bibtex/bib/njhigham_extra.bib"
+        ))
+
+(setq bibtex-completion-library-path '("~/pdf_papers/" "~/pdf_papers/higham/"
+                                       "~/pdf_books/"))
+;; ;; This obsolete, but try anyway.
+;; (setq helm-bibtex-library-path '("~/pdf_papers" "~/pdf_papers/higham"
+;;                                 "~/pdf_books"))
+
+;; Shouldn't be necessary, but PDF files not being found on Windows.
+;; (setq helm-bibtex-library-path nil)
+;; (setq helm-bibtex-pdf-field nil)
+;; (setq bibtex-completion-pdf-field nil)
+
+(setq helm-bibtex-pdf-symbol "#")
+
+(if (system-is-mac)
+  (setq helm-bibtex-pdf-open-function
+    (lambda (fpath)
+    (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath))))
+;;  'helm-open-file-with-default-tool))
+
+;; Now gives "symbol's function definition is void."
+;; Commented out for now (docvew will be used?).
+;; (if (system-is-mac)
+;; ;; (setq bibtex-completion-pdf-open-function
+;; (setq bibtex-completion-open-pdf
+;;   (lambda (fpath)
+;;     (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath)))
+;; )
+
+;; Got this working by trial and error, helped by
+;; http#://stackoverflow.com/questions/2284319/opening-files-with-default-windows-application-from-within-emacs
+;; (if (system-is-windows)
+;;  (setq helm-bibtex-pdf-open-function    ;; Open PDF in Sumatra
+;;     (lambda (fpath) (shell-command
+;;              (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
+
+(if (system-is-windows)
+(setq bibtex-completion-pdf-open-function       ;; Open PDF in Sumatra
+;; (setq bibtex-completion-open-pdf       ;; Open PDF in Sumatra
+;;  (setq helm-bibtex-open-pdf       ;; Open PDF in Sumatra
+    (lambda (fpath) (shell-command
+             (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
+			 
+;; 	http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed   需要认真阅读，org-mode与helm的交织		 
+;;有待完善
+
+(fset 'yes-or-no-p 'y-or-n-p)        ; Change yes/no questions to y/n type.	
+;(use-package smart-mode-line
+;;    :ensure t)         ;Display a more compact mode line    ???have a problem
+;; http://pages.sachachua.com/.emacs.d/Sacha.html
+
+;------------------------undo-tree----------------------------------------
+;People often struggle with the Emacs undo model, where there's really no concept of "redo" - you simply undo the undo.
+;This lets you use C-x u (undo-tree-visualize) to visually walk through the changes you've made, 
+;undo back to a certain point (or redo), and go down different branches.
+(use-package  undo-tree 
+  :ensure  t 
+  :init 
+    (global-undo-tree-mode ))
+
+;------------------------which-key------or----- guide-key-----------------------------
+;Help It's hard to remember keyboard shortcuts. The guide-key package pops up help after a short delay.	
+(use-package which-key
+  ;; :load-path "~/dropbox/elisp/which-key"
+  :disabled  t                ;和guide-key功能相同？
+  :config
+  ;; (setq guide-key/highlight-command-regexp "rectangle")
+  (which-key-mode)
+  (which-key-setup-minibuffer)
+)
+	
+;Help It's hard to remember keyboard shortcuts. The guide-key package pops up help after a short delay.	
+(use-package guide-key
+  :defer t
+  :diminish guide-key-mode
+  :config
+  (progn
+  (setq guide-key/guide-key-sequence '("C-x r" "C-x 4" "C-c"))
+  (guide-key-mode 1)))  ; Enable guide-key-mode
+	
+;------------------UTF-8-------------------------------------------------
+;; From http://www.wisdomandwonder.com/wordpress/wp-content/uploads/2014/03/C3F.html
+(prefer-coding-system 'utf-8)
+(when (display-graphic-p)
+ (setq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)))	
+
+;---------------------------------------------------------------------------------
+;;fix chinese coding  解决中文字体显示为乱码 方框数字
+ ;;(set-fontset-font "fontset-default"'gb18030' ("Microsoft YaHei" . "unicode-bmp"))
+ (set-default-font "-outline-微软雅黑-normal-normal-normal-sans-21-*-*-*-p-*-iso8859-1")
+ 
+;; Font size - no effect with fixed-sys font in Windows.
+(define-key global-map (kbd "C-M-+") 'text-scale-increase)
+(define-key global-map (kbd "C-M--") 'text-scale-decrease)
+
+(define-key global-map (kbd "M-[") 'backward-sentence)
+(define-key global-map (kbd "M-]") 'forward-sentence)  
+  
 ;;; * Other misc setup stuff
 
 ;; Trying omitting this for Mac to see if clipboard problem solved.
@@ -217,6 +410,8 @@
 (if (system-is-windows)
 (setq save-interprogram-paste-before-kill 1) ; Save clipbrd string before kill.
 )
+
+
 
 ;; ---------------------------------------------------------------
 ;; Force calls to use previous instance of Emacs.
@@ -236,21 +431,22 @@
 (setq calendar-location-name "Eccles, UK")
 
 ;----------------------------------------------------------------------
-(use-package anzu
-  ;; :load-path "~/Dropbox/elisp/anzu"
-  :config
-  (global-anzu-mode 1)
-  (set-face-attribute 'anzu-mode-line nil
-                      :foreground "yellow" :weight 'bold)
-  (custom-set-variables
-   '(anzu-mode-lighter "")
-   '(anzu-deactivate-region t)
-   '(anzu-search-threshold 1000)
-   '(anzu-replace-threshold 50)
-   '(anzu-replace-to-string-separator " => "))
-  (define-key isearch-mode-map [remap isearch-query-replace]  #'anzu-isearch-query-replace)
-  (define-key isearch-mode-map [remap isearch-query-replace-regexp] #'anzu-isearch-query-replace-regexp)
-)
+;;Emacs Port of anzu.vim
+;;(use-package anzu    ;;I don't need it for now. Another reason is that I want to use emacs purely for now. 
+;;  ;; :load-path "~/Dropbox/elisp/anzu"
+;;  :config
+;;  (global-anzu-mode 1)
+;;  (set-face-attribute 'anzu-mode-line nil
+;;                      :foreground "yellow" :weight 'bold)
+;;  (custom-set-variables
+;;   '(anzu-mode-lighter "")
+;;   '(anzu-deactivate-region t)
+;;   '(anzu-search-threshold 1000)
+;;   '(anzu-replace-threshold 50)
+;;   '(anzu-replace-to-string-separator " => "))
+;;  (define-key isearch-mode-map [remap isearch-query-replace]  #'anzu-isearch-query-replace)
+;;  (define-key isearch-mode-map [remap isearch-query-replace-regexp] #'anzu-isearch-query-replace-regexp)
+;;)
 ; ----------------------------------------------------------------------
 ;; For latest ORG mode downloaded by me.
 ;;(add-to-list 'load-path "~/Dropbox/elisp/org/lisp")
@@ -276,7 +472,7 @@
 
 ;; ------------------------------------------------
 
-(use-package smex
+(use-package smex     ;;smex feels like part of ido or ivy ????
   ;; :load-path "~/dropbox/elisp/smex-master"
   :init (smex-initialize)
   :bind (("M-x" . smex)
@@ -301,11 +497,7 @@
 ;; http://pragmaticemacs.com/emacs/instant-scratch-buffer-for-current-mode/
 ;;(require 'scratch)
 
-; ----------------- Neatly load some packages -----------------------
-;; Dash is needed by ace-jump-buffer and wrap-region.
-; If :defer on next line then ace-jump-buffer doesn't work.
-(use-package dash) ;;                    :load-path "~/dropbox/elisp/dash")
-(use-package s ) ;;          :defer t    :load-path "~/Dropbox/elisp/s")
+
 
 ;;(use-package git-timemachine) ;; :load-path  "~/Dropbox/elisp/git-timemachine")
 
@@ -313,32 +505,30 @@
 
 ;;(setq diredp-hide-details-initially-flag nil) ;; Full details in listing.
 
+;;convert between PCRE, Emacs and rx regexp syntax 语法转换器
 (use-package pcre2el
-:ensure t
-:config 
-(pcre-mode)
+   :disabled t  ;;启动时加载时间长，且暂时我可能不会用到
+;;:ensure t                  ;;ensure 会安装系统上没有的package，但不会主动更新
+  :config 
+  (pcre-mode)
 )
 
-
+;;writeable global search a regular expression 可写的全局正则表达搜索，文本搜索
 (use-package wgrep
-    :ensure t
+  ;;:ensure t  
+  :defer t  ;;delay 
+
     )
+
+(use-package wgrep-ag
+    :defer t
+;;  :ensure t 
+)
 
 (setq counsel-fzf-cmd "/home/zamansky/.fzf/bin/fzf -f %s")
 
 (use-package dired
   :bind ("C-c j" . dired-two-pane)
-  :bind (:map dired-mode-map
-              ("j"     . dired)
-              ("z"     . pop-window-configuration)
-              ("e"     . ora-ediff-files)
-              ("l"     . dired-up-directory)
-              ("q"     . dired-up-directory)
-              ("Y"     . ora-dired-rsync)
-              ("M-!"   . async-shell-command)
-              ("<tab>" . dired-next-window)
-              ("M-G")
-              ("M-s f"))
   :diminish dired-omit-mode
   :hook (dired-mode . dired-hide-details-mode)
   :preface
@@ -470,7 +660,6 @@
 
 (use-package dired-x
   :after dired)
-  
 
 ; For describe-unbound-keys
 ;;(use-package unbound)
@@ -501,7 +690,7 @@
         "auto/"))
 
 ;; ----------------------------------
-;; recentf
+;; Recentf  is a minor mode that builds a list of recently opened files.
 
 (use-package recentf
   :init
@@ -560,11 +749,7 @@
   ;; :load-path "~/dropbox/elisp/macrostep"
   :bind ("C-c e m" . macrostep-expand))
 
-;; http://pages.sachachua.com/.emacs.d/Sacha.html
-(use-package  undo-tree 
-  :ensure  t 
-  :init 
-    (global-undo-tree-mode ))
+
 ; ------------------------------------------------------------
 ;; http://pragmaticemacs.com/emacs/dont-kill-buffer-kill-this-buffer-instead/
 (global-set-key (kbd "C-x k") 'kill-this-buffer)
@@ -577,7 +762,8 @@
 
 ;; http://www.blogbyben.com/2013/08/a-tiny-eshell-add-on-jump-to-shell.html
 ;; (add-to-list 'load-path "~/dropbox/elisp/shell-pop")
-(use-package shell-pop)
+(use-package shell-pop
+:defer t)
 (global-set-key [S-f3] 'shell-pop) ;; Default is buffer's dir.
 
 ;; Reload .emacs.
@@ -591,89 +777,8 @@
 ;; (require 'gitconfig-mode)
 ;; (require 'gitignore-mode)
 
-;; Helm ------------------------------------------------
-;; If I decide to convert to use-package, see
-;; http://pages.sachachua.com/.emacs.d/Sacha.html#unnumbered-14
-;; http://writequit.org/org/settings.html#sec-1-34
 
-(require 'helm-config)
 
-;; https://github.com/emacs-helm/helm
-;; async doesn't seem to be needed.
-;; [Facultative] Only if you have installed async.
-;; (add-to-list 'load-path "~/dropbox/elisp/async")
-
-;; (add-to-list 'load-path "~/dropbox/elisp/helm")
-;; (add-to-list 'load-path "~/dropbox/elisp/helm-bibtex")
-;; (add-to-list 'load-path "~/dropbox/elisp/f")
-;; (add-to-list 'load-path "~/dropbox/elisp/s")
-;; (add-to-list 'load-path "~/dropbox/elisp/parsebib")
-
-;; Next lime gives error on loading - why?
-;; Works fine once loaded.
-;; (helm-autoresize-mode t)
-;; (setq helm-autoresize-max-height 80)
-
-;; Consider redefining Smex keys.
-(global-set-key (kbd "M-x") 'helm-M-x)
-
-;; -----------------------------------------------------------------
-;; helm-bibtex
-;; The requires are not needed now I'm installing helm-bibtex from Melpa.
-;; Next two are required in helm-bibtex.
-;; (require 'f)
-;; (require 'parsebib)
-;; Next line needed only so 'bibtex-completion-open-pdf is known for C-c p.
-(require 'helm-bibtex)
-;; (setq helm-bibtex-bibliography
-(setq bibtex-completion-bibliography
-      '("~/texmf/bibtex/bib/la.bib"
-        "~/texmf/bibtex/bib/misc.bib"
-        "~/texmf/bibtex/bib/njhigham.bib"
-        "~/texmf/bibtex/bib/njhigham_extra.bib"
-        ))
-
-(setq bibtex-completion-library-path '("~/pdf_papers/" "~/pdf_papers/higham/"
-                                       "~/pdf_books/"))
-;; ;; This obsolete, but try anyway.
-;; (setq helm-bibtex-library-path '("~/pdf_papers" "~/pdf_papers/higham"
-;;                                 "~/pdf_books"))
-
-;; Shouldn't be necessary, but PDF files not being found on Windows.
-;; (setq helm-bibtex-library-path nil)
-;; (setq helm-bibtex-pdf-field nil)
-;; (setq bibtex-completion-pdf-field nil)
-
-(setq helm-bibtex-pdf-symbol "#")
-
-(if (system-is-mac)
-  (setq helm-bibtex-pdf-open-function
-    (lambda (fpath)
-    (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath))))
-;;  'helm-open-file-with-default-tool))
-
-;; Now gives "symbol's function definition is void."
-;; Commented out for now (docvew will be used?).
-;; (if (system-is-mac)
-;; ;; (setq bibtex-completion-pdf-open-function
-;; (setq bibtex-completion-open-pdf
-;;   (lambda (fpath)
-;;     (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath)))
-;; )
-
-;; Got this working by trial and error, helped by
-;; http#://stackoverflow.com/questions/2284319/opening-files-with-default-windows-application-from-within-emacs
-;; (if (system-is-windows)
-;;  (setq helm-bibtex-pdf-open-function    ;; Open PDF in Sumatra
-;;     (lambda (fpath) (shell-command
-;;              (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
-
-(if (system-is-windows)
-(setq bibtex-completion-pdf-open-function       ;; Open PDF in Sumatra
-;; (setq bibtex-completion-open-pdf       ;; Open PDF in Sumatra
-;;  (setq helm-bibtex-open-pdf       ;; Open PDF in Sumatra
-    (lambda (fpath) (shell-command
-             (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
 ;; -----------------------------------------------------------------
 
 ;; Can't get this to work.  Nothing specfically on this found via Google.
@@ -685,26 +790,25 @@
 ; (define-key global-map "\C-c&" nil)
 
 (use-package yasnippet
-  :ensure t
-;  :bind (("C-c y d" . yas-load-directory)
-;        ("C-c y i" . yas-insert-snippet)
-;         ("C-c y f" . yas-visit-snippet-file)
- ;        ("C-c y n" . yas-new-snippet)
- ;        ("C-c y t" . yas-tryout-snippet)
- ;        ("C-c y l" . yas-describe-tables)
- ;        ("C-c y g" . yas/global-mode)
- ;        ("C-c y m" . yas/minor-mode)
- ;        ("C-c y a" . yas-reload-all)
- ;        ("C-c y x" . yas-expand))
-  :init
-    (yas-global-mode 1))
-  
-  (use-package auto-yasnippet
-  :after yasnippet
-  :bind (("C-c y a" . aya-create)
-         ("C-c y e" . aya-expand)
-         ("C-c y o" . aya-open-line)))
-		 
+  :ensure t 
+;;:demand t  ;;覆盖包的的延迟，强制进行加载， 即使有:bind 也不会再延迟
+  :diminish yas-minor-mode
+  :bind (("C-c y d" . yas-load-directory)
+         ("C-c y i" . yas-insert-snippet)
+         ("C-c y f" . yas-visit-snippet-file)
+         ("C-c y n" . yas-new-snippet)
+         ("C-c y t" . yas-tryout-snippet)
+         ("C-c y l" . yas-describe-tables)
+         ("C-c y g" . yas/global-mode)
+         ("C-c y m" . yas/minor-mode)
+         ("C-c y a" . yas-reload-all)
+         ("C-c y x" . yas-expand))
+   :bind (:map yas-keymap
+         ("C-i" . yas-next-field-or-maybe-expand))
+   :mode ("/\\.emacs\\.d/snippets/" . snippet-mode)
+   ;;:config
+   ;;(global-yasnippet 1);;报错
+ )
 ; -------------------------------------------------------------------
 ;; ;; Navigate use-package definitions in .emacs.
 ;; ;; http://irreal.org/blog/?p=3979
@@ -720,26 +824,6 @@
 ;;   (add-hook 'emacs-lisp-mode-hook #'jcs-use-package))
 
 ;; ----------------------------------------------------
-;; Ivy and Swiper
-;; require 'ivy)
-(use-package counsel
-  :ensure t
-)
-(use-package swiper
-  :ensure try
-  :config
-  (progn
-    (ivy-mode 1)
-;;    (setq enable-recursive-minibuffers t)  ;; Dangerous?
-    (setq ivy-use-virtual-buffers t
-          ivy-count-format "%d/%d ")
-    (global-set-key (kbd "C-S-s") 'swiper)
-    (global-set-key (kbd "<f6>") 'ivy-resume)
-    (global-set-key (kbd "<f6>") 'ivy-resume)
-    (global-set-key (kbd "C-x C-b") 'ivy-switch-buffer)
-    (global-set-key (kbd "C-S-f") 'counsel-find-file)
-    (global-set-key (kbd "C-c g") 'counsel-git)
-    ))
 
 (use-package avy
   :bind* ("C-." . avy-goto-char-timer)
@@ -780,7 +864,7 @@
 ;;          :username (netrc-get blog "login")
 ;;          :password (netrc-get blog "password"))))
 
-(winner-mode 1)
+;;(winner-mode 1)   ;;seem to be unnecessary
 
 ;; Yow has gone in 24.4.
 ;; (setq yow-file "~/dropbox/yow.lines" )
@@ -992,8 +1076,10 @@ Emacs buffers are those whose name starts with *."
 (global-set-key (kbd "C-M-n") 'previous-buffer-same-mode)
 (global-set-key (kbd "C-M-p") 'next-buffer-same-mode)
 
-;; --------------------------------------
+;; ------------deft(need to be modified)--------------------------
 ;; http://pragmaticemacs.com/emacs/make-quick-notes-with-deft/
+;;https://github.com/jrblevin/deft
+;;Deft is an Emacs mode for quickly browsing, filtering, and editing directories of plain text notes
 (use-package deft)
 (setq deft-directory "~/memo")
 (setq deft-extensions '("org"))
@@ -1002,10 +1088,8 @@ Emacs buffers are those whose name starts with *."
 (setq deft-use-filename-as-title t)
 (setq deft-use-filter-string-for-filename t)
 (setq deft-auto-save-interval 0)
-;;key to launch deft
-;; (global-set-key (kbd "C-c d") 'deft)
 
-;; -------------------------------------------------
+;; ----------------------RSS-------------------------------------------------
 ;; Elfeed
 ;; From http://cestlaz.github.io/posts/using-emacs-29%20elfeed/#.WLd6QxxBSRd
 ;;(setq elfeed-db-directory "~/Dropbox/elfeeddb")
@@ -1049,19 +1133,35 @@ Emacs buffers are those whose name starts with *."
 ; (defalias 'elfeed-toggle-star
 ;  (elfeed-expose #'elfeed-search-toggle-all 'star))
 
-(use-package elfeed-goodies
-  :ensure t
-  :config
-  (elfeed-goodies/setup))
+;;(use-package elfeed-goodies   ;;没有用过
+;;  :ensure t
+;;  :config
+;;  (elfeed-goodies/setup))
 
 (setq elfeed-feeds
       '(
-        ("http://xkcd.com/rss.xml" comics XKCD)
-        ("http://irreal.org/blog/?feed=rss2" blog emacs)
-        ("http://pragmaticemacs.com/feed/" blog Emacs)
-        ("https://nibandmuck.com/" Nib and Muck)
-        ("http://sachachua.com/blog/category/emacs-news/feed" blog Emacs)
-))
+        "http://xkcd.com/rss.xml"                ;; comics XKCD
+        "http://irreal.org/blog/?feed=rss2"      ;; blog emacs
+        "http://pragmaticemacs.com/feed/"        ;; blog Emacs
+        "https://nibandmuck.com/"                ;; Nib and Muck
+        "http://sachachua.com/blog/category/emacs-news/feed" ;; blog Emacs
+		"http://www.howardism.org/index.xml"     ;; My Blog
+        "http://planet.emacsen.org/atom.xml"     ;; Emacs RSS
+        "http://sachachua.com/blog/category/emacs-news/feed"
+        "http://endlessparentheses.com/atom.xml" ;; Emacs Blog
+        "http://www.masteringemacs.org/feed/"    ;; Emacs Blog
+        "http://emacs-fu.blogspot.com/feeds/posts/default"
+        "http://emacsredux.com/atom.xml"         ;; Emacs Blog
+        "http://www.lunaryorn.com/feed.atom"     ;; Emacs Blog
+        "http://emacshorrors.com/feed.atom"
+        "http://swannodette.github.com/atom.xml" ;; David Nolen, duh.
+        "http://batsov.com/atom.xml"             ;; Bozhidar Batsov
+
+        "https://apod.nasa.gov/apod.rss"         ;; Nasa's Picture of the Day
+        "http://twogreenleaves.org/index.php?feed=rss"
+         )
+)
+
 
 ;; Seems to need older version of Org to install!
 ;; (use-package elfeed-org
@@ -1092,7 +1192,7 @@ Emacs buffers are those whose name starts with *."
   ("f" auto-fill-mode "auto-fill")
   ("h" html-mode "html")
   ("m" message-mode "msg")
-  ("n" narrow-or-widen-dwim "narw-wide")
+  ("n" narrow-or-widen-dwim "narw-wide") 
   ("r" read-only-mode "read-only")
   ("u" linum-mode "lin-num")
   ("q" nil "cancel")
@@ -1234,6 +1334,21 @@ Emacs buffers are those whose name starts with *."
    ("Q" bjm/elfeed-save-db-and-bury "Quit Elfeed" :color blue)
    ("q" nil "quit" :color blue)
    )
+   
+   (defhydra imalison:hydra-font
+  nil
+  "Font Settings"
+  ("-" imalison:font-size-decr "Decrease")
+  ("d" imalison:font-size-decr "Decrease")
+  ("=" imalison:font-size-incr "Increase")
+  ("+" imalison:font-size-incr "Increase")
+  ("i" imalison:font-size-incr "Increase")
+  ("h" imalison:set-huge-font-size "Huge")
+  ("a" imalison:appearance "Set Default Appearance")
+  ("f" set-frame-font "Set Frame Font")
+  ("t" helm-themes "Choose Emacs Theme")
+  ("0" imalison:font-size-reset "Reset to default size")
+  ("8" imalison:font-size-80chars "80 chars 3 columns font size"))
    
    
 ;; -------------------------------------------------
@@ -1511,16 +1626,16 @@ Works in Microsoft Windows, Mac OS X, Linux."
   (beginning-of-buffer)
   (dired-next-line 4))
 
-(define-key dired-mode-map
-  (vector 'remap 'beginning-of-buffer) 'dired-back-to-top)
+;;(define-key dired-mode-map
+;;  (vector 'remap 'beginning-of-buffer) 'dired-back-to-top)
 
-(defun dired-jump-to-bottom ()
-  (interactive)
-  (end-of-buffer)
-  (dired-next-line -1))
+;;(defun dired-jump-to-bottom ()
+ ;; (interactive)
+;;  (end-of-buffer)
+;;  (dired-next-line -1))
 
-(define-key dired-mode-map
-  (vector 'remap 'end-of-buffer) 'dired-jump-to-bottom)
+;;(define-key dired-mode-map
+ ;; (vector 'remap 'end-of-buffer) 'dired-jump-to-bottom)
 
 ;;------------------------------------------------------------
 (when (system-is-windows)
@@ -1564,13 +1679,24 @@ Works in Microsoft Windows, Mac OS X, Linux."
 
 ;; Initial frame size.
 ;; Seems this must come after the above, else window is shorter!
-(if (system-is-windows)
-(setq default-frame-alist
-;;      '((top . 10) (left . 650)      ; pixel offsets 100 and 900.
-      '((top . 10) (left . 40)      ; For small screen.
-;;        (width . 80) (height . 48)   ; width and height in pixels.
-        (width . 80) (height . 30)   ; For small screen.
-        )))
+
+;;(if (system-is-windows)
+;;(setq default-frame-alist
+;;      '((height . 25) (width . 125)  ))) 
+
+(defun my/set-initial-frame ()
+  (let* ((base-factor 0.70)
+	(a-width (* (display-pixel-width) base-factor))
+        (a-height (* (display-pixel-height) base-factor))
+        (a-left (truncate (/ (- (display-pixel-width) a-width) 2)))
+	(a-top (truncate (/ (- (display-pixel-height) a-height) 2))))
+    (set-frame-position (selected-frame) a-left a-top)
+    (set-frame-size (selected-frame) (truncate a-width)  (truncate a-height) t)))
+(setq frame-resize-pixelwise t)
+(my/set-initial-frame)
+
+(add-to-list 'default-frame-alist '(fullscreen . maximized));;开启emacs，窗口设置为最大化
+
 
 (if (system-is-MBP15)
 (setq default-frame-alist
@@ -2444,12 +2570,7 @@ abort completely with `C-g'."
   (align-regexp start end
                 "\\(\\s-*\\)&" 1 1 t))
 
-;; Font size - no effect with fixed-sys font in Windows.
-(define-key global-map (kbd "C-M-+") 'text-scale-increase)
-(define-key global-map (kbd "C-M--") 'text-scale-decrease)
 
-(define-key global-map (kbd "M-[") 'backward-sentence)
-(define-key global-map (kbd "M-]") 'forward-sentence)
 
 ;; http://www.emacswiki.org/emacs/LineCopyChar
 (defun line-copy-char (&optional b)
@@ -2876,52 +2997,133 @@ the character typed."
     ))
 	
 	
-;;; * LaTeX
 
-  
 
-	(mapc (lambda (mode)
-      (add-hook 'LaTeX-mode-hook mode))
-      (list ;; 'auto-fill-mode
-            'LaTeX-math-mode
-            'turn-on-reftex
-            'TeX-fold-mode
-            'linum-mode
-            'auto-complete-mode
-            'autopair-mode
-            'outline-minor-mode))
+;; Single space after period denotes end of sentence.
+(setq sentence-end-double-space nil)
 
-	 ;; (add-hook 'LaTeX-mode-hook
-    ;;      (lambda ()
-    ;;        (add-to-list 'TeX-command-list '("XeLaTeX" "%`xelatex%(mode)%' %t" TeX-run-TeX nil t))
-    ;;        (setq TeX-command-default "XeLaTeX")
-    ;;        (setq TeX-save-query  nil )
-    ;;        (setq TeX-show-compilation t)))		
-			
-	(add-hook 'LaTeX-mode-hook
-          (lambda ()
-            ;;(setq TeX-auto-untabify t)     ; remove all tabs before saving
-			(add-to-list 'TeX-command-list '("XeLaTeX" "%`xelatex%(mode)%' %t" TeX-run-TeX nil t))
-            (setq TeX-command-default "XeLaTeX")      ; use xelatex default
-            (setq TeX-show-compilation t) ; display compilation windows
-            (TeX-global-PDF-mode t)       ; PDF mode enable, not plain
-            (setq TeX-save-query nil)
-            (imenu-add-menubar-index)
-            ;;(define-key LaTeX-mode-map (kbd "TAB") 'TeX-complete-symbol)
-            ))
-			
-			
+;; http://emacswiki.org/emacs/UnfillParagraph
+;;; Stefan Monnier <foo at acm.org>. It is the opposite of fill-paragraph
+(defun unfill-paragraph ()
+  "Takes a multi-line paragraph and makes it into a single line of text."
+  (interactive)
+  (let ((fill-column (point-max)))
+    (fill-paragraph nil)))
+(global-set-key (kbd "<S-f7>") 'unfill-paragraph)
 
-(use-package auctex-latexmk
- ;; :load-path "~/dropbox/elisp/bratex"
- ;; :config
-;;(require 'bratex)
-;;(add-hook 'LaTeX-mode-hook #'bratex-config)
+(defun unfill-region ()
+  "Unfill a region, i.e., make text in that region not wrap."
+   (interactive)
+   (let ((fill-column (point-max)))
+   (fill-region (region-beginning) (region-end) nil)))
+
+(defun fill-to-end-of-buffer ()
+"Fill to end of buffer."
+(interactive)
+(save-excursion
+(delete-trailing-whitespace)
+(fill-region (point) (point-max) nil)
+(untabify (point) (point-max))))
+
+
+;;;-------------completion---------------------
+;;     company           ; the ultimate code completion backend
+;;     ivy               ; a search engine for love and life
+      ;helm              ; the *other* search engine for love and life
+      ;ido               ; the other *other* search engine...
+	  
+;; the ultimate code completion backend
+(use-package company
+   :ensure t
+   :config
+      (setq company-idle-delay 0)
+      (setq company-minimum-prefix-length 3)
+)   
+(global-company-mode t)
+
+;; Ivy and Swiper
+;; require 'ivy)
+(use-package counsel
+  :ensure t
 )
+(use-package swiper
+  :ensure try
+  :config
+  (progn
+    (ivy-mode 1)
+;;    (setq enable-recursive-minibuffers t)  ;; Dangerous?
+    (setq ivy-use-virtual-buffers t
+          ivy-count-format "%d/%d ")
+    (global-set-key (kbd "C-S-s") 'swiper)
+    (global-set-key (kbd "<f6>") 'ivy-resume)
+    (global-set-key (kbd "<f6>") 'ivy-resume)
+    (global-set-key (kbd "C-x C-b") 'ivy-switch-buffer)
+    (global-set-key (kbd "C-S-f") 'counsel-find-file)
+    (global-set-key (kbd "C-c g") 'counsel-git)
+    ))
 
-;; To fix problem with parsing error messages from Emacs 24.x onwards:
-;; http://tex.stackexchange.com/questions/124246/uninformative-error-message-when-using-auctex
-(setq LaTeX-command-style '(("" "%(PDF)%(latex) -file-line-error %S%(PDFout)")))
+	
+ 
+;; --------------------------------------------------------
+;; AUCTeX stuff.
+
+
+;;from jwiegley's config 
+(use-package auctex
+  ;;:load-path "~/elisp/auctex-12.1.1/auctex"   ;;unsuccessful
+  :mode ("\\.tex\\'" . TeX-latex-mode)
+  :config
+  (defun latex-help-get-cmd-alist ()    ;corrected version:
+    "Scoop up the commands in the index of the latex info manual.
+   The values are saved in `latex-help-cmd-alist' for speed."
+    ;; mm, does it contain any cached entries
+    (if (not (assoc "\\begin" latex-help-cmd-alist))
+        (save-window-excursion
+          (setq latex-help-cmd-alist nil)
+          (Info-goto-node (concat latex-help-file "Command Index"))
+          (goto-char (point-max))
+          (while (re-search-backward "^\\* \\(.+\\): *\\(.+\\)\\." nil t)
+            (let ((key (buffer-substring (match-beginning 1) (match-end 1)))
+                  (value (buffer-substring (match-beginning 2)
+                                           (match-end 2))))
+              (add-to-list 'latex-help-cmd-alist (cons key value))))))
+    latex-help-cmd-alist)
+
+  (add-hook 'TeX-after-compilation-finished-functions
+            #'TeX-revert-document-buffer))
+
+
+
+;;加载cdlatex后，（导致启动慢） 
+;;(load-file "~/.emacs.d/lisp/cdlatex.el") ;;设置加载路径(add-to-list 'load-path "~/lisp")，此行就不需要了，如果以此行设置，启动时慢
+(add-hook 'LaTeX-mode-hook 'turn-on-cdlatex)   ; with AUCTeX LaTeX mode
+
+
+
+;; PDF previewers.
+(if (system-is-windows)
+(progn
+;;(setq TeX-view-program-list '(("Sumatra" "\"SumatraPDF.exe\" -reuse-instance %o")))
+ (setq TeX-view-program-list '(("Sumatra" "\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance %o")))
+;; (setq TeX-view-program-list '(("Sumatra" "Sumatra_emacs.bat %o") ))
+(setq TeX-view-program-selection '((output-pdf "Sumatra") (output-dvi "dviout")))
+))
+
+
+   
+;; Following didn't work when put within previous progn.
+;; http://william.famille-blum.org/blog/static.php?page=static081010-000413
+;;(if (system-is-windows)
+;;(require 'sumatra-forward)   ; For forward search.
+;;)
+
+;;; * LaTeX
+(add-hook 'LaTeX-mode-hook
+          (lambda ()
+            (add-to-list 'TeX-command-list '("XeLaTeX" "%`xelatex%(mode)%' %t" TeX-run-TeX nil t))
+            (setq TeX-command-default "XeLaTeX")
+            (setq TeX-save-query  nil )
+            (setq TeX-show-compilation t)))
 
 ;; From https://github.com/tmalsburg/helm-bibtex/issues/121#issuecomment-237981605
 (defun bibtex-completion-open-pdf-of-entry-at-point ()
@@ -3152,440 +3354,6 @@ the character typed."
 (add-hook 'bibtex-clean-entry-hook 'bp/bibtex-clean-entry-hook)
 (global-set-key (kbd "<f7>") 'fill-sentence)
 
-;; Single space after period denotes end of sentence.
-(setq sentence-end-double-space nil)
-
-;; http://emacswiki.org/emacs/UnfillParagraph
-;;; Stefan Monnier <foo at acm.org>. It is the opposite of fill-paragraph
-(defun unfill-paragraph ()
-  "Takes a multi-line paragraph and makes it into a single line of text."
-  (interactive)
-  (let ((fill-column (point-max)))
-    (fill-paragraph nil)))
-(global-set-key (kbd "<S-f7>") 'unfill-paragraph)
-
-(defun unfill-region ()
-  "Unfill a region, i.e., make text in that region not wrap."
-   (interactive)
-   (let ((fill-column (point-max)))
-   (fill-region (region-beginning) (region-end) nil)))
-
-(defun fill-to-end-of-buffer ()
-"Fill to end of buffer."
-(interactive)
-(save-excursion
-(delete-trailing-whitespace)
-(fill-region (point) (point-max) nil)
-(untabify (point) (point-max))))
-
-(use-package company
-:ensure t
-:config
-(setq company-idle-delay 0)
-(setq company-minimum-prefix-length 3)
-
-(global-company-mode t)
-)
-
- 
-;; --------------------------------------------------------
-;; AUCTeX stuff.
-
-;; Next line definitely not needed now I have auctex installed from Gnu Elpa.
-;; (load "auctex.el" nil t t) ;; Not clear if this is needed.
-
-(setq TeX-parse-self t); Enable parse on load.
-(setq TeX-PDF-mode t)
-(setq TeX-save-query nil); No autosave before compiling
-(setq TeX-quote-after-quote 1); Now fancy quotes only on hitting "".
-
-;; May not need next line, unless parse on load proves slow.
-;; Useful for multi-file docs, so turn on locally for them.
-;; (setq TeX-auto-save t);  Enable save of parsed info to ./auto.
-
-;; Turn off AucTex previewing.
-;; (load "preview-latex.el" nil t t)
-;; Is latter necessary - turned off while trying 24.4 and doesn't seem
-;; needed.  Needed on Mac else tex-buf fails to load below.
-;; But the load auctex above avoid the latter problem.
-
-; Section titles in color but not larger font.
-(setq font-latex-fontify-sectioning 'color)
-;; Turn off AucTex special fonts for subscripts etc.
-(setq font-latex-fontify-script nil)
-
-(require 'reftex)
-(add-hook 'LaTeX-mode-hook 'turn-on-reftex) ; with AUCTeX LaTeX mode
-(add-hook 'latex-mode-hook 'turn-on-reftex) ; with Emacs latex mode
-(setq reftex-plug-into-AUCTeX t)            ; Integrate RefTeX with AUCTeX.
-
-(add-hook 'text-mode-hook 'my-cite-hook)  ;; And in org mode, below.
-(add-hook 'matlab-mode-hook 'my-cite-hook)
-(add-hook 'lisp-interaction-mode-hook 'my-cite-hook) ;; For scratch buffer.
-
-;; So RefTeX knows where to look when not in a .tex file.
-(setq reftex-default-bibliography
-      (quote
-       ("njhigham.bib" "la.bib" "strings.bib" "misc.bib" "work.bib")))
-;; work.bib is solely for entries I want to include but not cite.
-
-(setq reftex-ref-macro-prompt nil) ; No prompt for ref type (new to 24.3).
-;; Specifying how AUCTeX creates labels for these environments.
-;; Note that refs to eq* envs set to use \eqref.
-(setq reftex-label-alist
-'(
-("algorithm"   ?a "alg."  "~\\ref{%s}" t   ("Algorithm"))
-("corollary"   ?c "cor."  "~\\ref{%s}" t   ("Corollary"))
-("definition"  ?d "def."  "~\\ref{%s}" nil ("Definition" "Definitions"))
-(nil           ?e ""      "~\\eqref{%s}" nil nil )  ; equation, eqnarray
-(nil           ?i ""      "~\\ref{%s}" nil nil )  ; item
-("example"     ?z "ex."   "~\\ref{%s}" t   ("Example" "Examples"))
-("figure"      ?f "fig."  "~\\ref{%s}" t   ("Figure" "Figures"))
-("lemma"       ?l "lem."  "~\\ref{%s}" t   ("Lemma"))
-("assumption"  ?m "ass."  "~\\ref{%s}" t   ("Assumption"))
-("problem"     ?x "prob." "~\\ref{%s}" t   ("Problem"))
-("proposition" ?p "prop." "~\\ref{%s}" t   ("Proposition"))
-("code"        ?n "line." "~\\ref{%s}" nil nil) ;; Doesn't work!
-(nil           ?s "sec."  "~\\ref{%s}" nil nil)
-("table"       ?t "table."  "~\\ref{%s}" t   ("Tables" "Tables"))
-("theorem"     ?h "thm."  "~\\ref{%s}" t   ("Theorem" "Theorems"))
-	)
-)
-(setq reftex-insert-label-flags (quote ("s" "seftacihlpz")))
-
-(add-hook 'LaTeX-mode-hook
-	  (lambda ()
-	    (LaTeX-add-environments
-	     '("algorithm" LaTeX-env-label)
-	     '("corollary" LaTeX-env-label)
-	     '("definition" LaTeX-env-label)
-	     '("example" LaTeX-env-label)
-	     '("lemma" LaTeX-env-label)
-	     '("mylist2" nil)
-	     '("problem" LaTeX-env-label)
-	     '("proposition" LaTeX-env-label)
-	     '("theorem" LaTeX-env-label)
-	     )
-	    )
-	  )
-
-(setq LaTeX-eqnarray-label ""
-      LaTeX-equation-label ""
-      LaTeX-figure-label "fig"
-      LaTeX-table-label "table"
-      LaTeX-indent-level 0  ; default 2
-      LaTeX-item-indent 0   ; default 2
-)
-
-;; This causes latex-mode not to start on loading a .tex file.  Why?
-;; ;; Support for latexmk
-;; ;; https://github.com/jedrz/.emacs.d/blob/master/setup-latex-mode.el
-;; (use-package auctex-latexmk
-;;   :load-path "~/dropbox/elisp/auctex-latexmk"
-;;   :defer t
-;;   :init
-;;   (with-eval-after-load 'latex
-;;     (auctex-latexmk-setup)
-;;     (setq auctex-latexmk-inherit-TeX-PDF-mode t)
-;;     ))
-
-;; This is slow to load!
-;; Support for latexmk
-(use-package auctex-latexmk
-;;  :load-path "~/dropbox/elisp/auctex-latexmk"
-  :config
-     (auctex-latexmk-setup)
-     (setq auctex-latexmk-inherit-TeX-PDF-mode t)
-)
-
-;; This loads no faster than the use-package variant above (3 secs).
-;; (add-to-list 'load-path "~/dropbox/elisp/auctex-latexmk")
-;; (require 'auctex-latexmk)
-;; (auctex-latexmk-setup)
-;; (setq auctex-latexmk-inherit-TeX-PDF-mode t)
-
-;; http://vince-debian.blogspot.co.uk/2007/11/reftex-and-beamer.html
-;; http://emacsworld.blogspot.co.uk/2008/03/getting-beamer-frame-titles-into-reftex.html
-;; Don't need the hook!  I think the (require 'reftex) above suffices.
-;; The sorting of entries comes out fine.
-;; (add-hook 'LaTeX-mode-hook (lambda ()
-;;   (turn-on-reftex)
-  (setq reftex-section-levels
-    (cons '("Article" . -1) reftex-section-levels))  ;; PCAM
-  (setq reftex-section-levels
-  (append '(("begin{frame}" . -3) ) reftex-section-levels))
-;;   (append '(("begin{frame}" . -3) ("frametitle" . -3))  reftex-section-levels))
-  ;; NB: previous line produces list with unwanted outer parens if cons is
-  ;;     used in place of append.
-  ;; (setq reftex-section-levels
-  ;;   (cons '("begin{frame}" . -3) reftex-section-levels))
-  ;; (setq reftex-section-levels
-  ;;   (cons '("frametitle" . -3) reftex-section-levels))
-;;  ))
-
-;; Turn off Auctex autoindent, which is annoying in version 11.90.2.
-;; http://stackoverflow.com/questions/21862391/prevent-auctex-indentation-with-fill-paragraph
-;; http://stackoverflow.com/questions/10743708/emacs-turn-off-indentation-when-doing-a-paragraph-fill-in-latex-mode
-(add-hook 'LaTeX-mode-hook
-          (lambda ()
-;;   https://www.gnu.org/software/auctex/manual/auctex/Indenting.html
-;;            (define-key latex-map (kbd "RET") 'LaTeX-newline)
-            (local-set-key (kbd "RET") 'LaTeX-newline)
-            (setq LaTeX-insert-into-comments nil) ;; Else adds unwanted "%".
-;             (kill-local-variable 'line-indent-function)
-;;            (setq LaTeX-indent-level 0)
-;;            (setq LaTeX-item-indent 0)
-;;            (setq fill-indent-according-to-mode nil))
-))
-
-;;加载cdlatex
-(load-file "~/.emacs.d/lisp/cdlatex.el")
-(add-hook 'LaTeX-mode-hook 'turn-on-cdlatex)   ; with AUCTeX LaTeX mode
-
-;---------------------------------
-;; Let AucTeX know about my own macros.
-;; Fontification
-;; http://tex.stackexchange.com/questions/85849/auctex-new-commands-recognized-as-such
-;; http://lists.gnu.org/archive/html/emacs-orgmode/2009-05/msg00236.html
-;; http://www.gnu.org/software/auctex/manual/auctex/Fontification-of-macros.html
-
-; Use next line for standard macros.
-      ;; (setq font-latex-match-reference-keywords
-      ;; '(
-      ;;   ("cite" "[{")
-      ;;   ))
-(setq font-latex-match-italic-command-keywords
-      '(
-        ;; ("cite" "[{")
-        ("iemph" "{")
-        ))
-;---------------------------------
-
-;; http://stackoverflow.com/questions/10531115/insert-starred-environment-or-command-in-auctex
-(defun LaTeX-star-environment()
-  "Convert between the starred and the not starred version of the current environment."
-  (interactive)
-  ;; If the current environment is starred.
-  (if (string-match "\*$" (LaTeX-current-environment))
-    ;; Remove the star from the current environment.
-    (LaTeX-modify-environment (substring (LaTeX-current-environment) 0 -1))
-    ;; Else add a star to the current environment.
-    (LaTeX-modify-environment (concat (LaTeX-current-environment) "*"))))
-(add-hook 'LaTeX-mode-hook '(lambda () (local-set-key (kbd "C-c C-u") 'LaTeX-star-environment)))
-
-;; PDF previewers.
-(if (system-is-windows)
-(progn
-;;(setq TeX-view-program-list '(("Sumatra" "\"SumatraPDF.exe\" -reuse-instance %o")))
- (setq TeX-view-program-list '(("Sumatra" "\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance %o")))
-;; (setq TeX-view-program-list '(("Sumatra" "Sumatra_emacs.bat %o") ))
-(setq TeX-view-program-selection '((output-pdf "Sumatra") (output-dvi "dviout")))
-))
-
-;; Following didn't work when put within previous progn.
-;; http://william.famille-blum.org/blog/static.php?page=static081010-000413
-;;(if (system-is-windows)
-;;(require 'sumatra-forward)   ; For forward search.
-;;)
-
-;; From http://www.bleedingmind.com/index.php/2010/06/17/synctex-on-linux-and-mac-os-x-with-emacs/
-;; Trying TeX-view-program-list-builtin (added "builtin") doesn't help.
-(if (system-is-mac)
-(progn
-(setq TeX-view-program-list
-'(("Skim" "/Applications/Skim.app/Contents/SharedSupport/displayline %n %o %b")
-("Preview" "open -a Preview.app %o")))
-(setq TeX-view-program-selection '((output-pdf "Skim")))
-))
-;; Then f5 and C-c C-v open Skim at the current Emacs location.
-;; See also, for a different set of arguments to Skim (oddly):
-;; http://stackoverflow.com/questions/7899845/emacs-synctex-skim-how-to-correctly-set-up-syncronization-none-of-the-exia
-
-;; My function to open TeX file in Acrobat (for printing or talk).
-;; Only intended for Windows.  Heed to modify for Mac.
-;; https://stackoverflow.com/questions/17325713/looking-for-a-replace-in-string-function-in-elisp
-(defun open-in-acrobat (arg)
-  "Open PDF of current LaTeX buffer in Acrobat."
-  (interactive "p")
-  (shell-command
-   (concat "start /pgm Acrobat.exe "
-   (file-name-sans-extension (buffer-file-name)) ".pdf" )
-   ))
-(global-set-key [C-S-f5]'open-in-acrobat)
-
-;; http://tex.stackexchange.com/questions/24510/pdflatex-fails-within-emacs-app-but-works-in-terminal
-;; This is needed on MBPro w/Mountain Lion and TeXLiVe 2012
-;; in order that pdflatex is found.
-(if (system-is-mac)
-(progn
-; For LaTeX:
-(setenv "PATH"
-(concat "/usr/texbin" ":" "/Library/TeX/texbin" ":" (getenv "PATH")))
-; For gpg:
-; http://danzorx.tumblr.com/post/11976550618/easypg-for-emacs-on-os-x-or-sometimes-emacs-doesnt
-(add-to-list 'exec-path "/usr/local/bin")
-;; Next line needed because not all env variables inherited by Emacs shell.
-;; (setenv "BIBINPUTS" "/Users/nick/texmf/bibtex/bib;.")
-(setenv "BIBINPUTS" (concat (getenv "HOME") "/texmf/bibtex/bib:."))
-))
-
-;;------------------------------------------------------------
-;; Question about how reliably this works.
-;; http://www.emacswiki.org/emacs/TN#toc8
-(require 'tex-buf)
-(defun TeX-command-default (name)
-  "Next TeX command to use. Most of the code is stolen from `TeX-command-query'."
-  (cond ((if (string-equal name TeX-region)
-			     (TeX-check-files (concat name "." (TeX-output-extension))
-					      (list name)
-					      TeX-file-extensions)
-			   (TeX-save-document (TeX-master-file)))
-			 TeX-command-default)
-			((and (memq major-mode '(doctex-mode latex-mode))
-			      (TeX-check-files (concat name ".bbl")
-					       (mapcar 'car
-						       (LaTeX-bibliography-list))
-					       BibTeX-file-extensions))
-			 ;; We should check for bst files here as well.
-			 TeX-command-BibTeX)
-			((TeX-process-get-variable name
-						   'TeX-command-next
-						   TeX-command-Show))
-			(TeX-command-Show)))
-
-;; NJH: added next line in place of the one after to stop viewer being called.
-(setq TeX-texify-Show nil)
-;; (defcustom TeX-texify-Show t "Start view-command at end of TeX-texify?" :type 'boolean :group 'TeX-command)
-(defcustom TeX-texify-max-runs-same-command 5 "Maximal run number of the same command" :type 'integer :group 'TeX-command)
-
-(defun TeX-texify-sentinel (&optional proc sentinel)
-  "Non-interactive! Call the standard-sentinel of the current LaTeX-process.
-If there is still something left do do start the next latex-command."
-  (set-buffer (process-buffer proc))
-  (funcall TeX-texify-sentinel proc sentinel)
-  (let ((case-fold-search nil))
-    (when (string-match "\\(finished\\|exited\\)" sentinel)
-      (set-buffer TeX-command-buffer)
-      (unless (plist-get TeX-error-report-switches (intern (TeX-master-file)))
-	(TeX-texify)))))
-
-(defun TeX-texify ()
-  "Get everything done."
-  (interactive)
-  (let ((nextCmd (TeX-command-default (TeX-master-file)))
-	proc)
-    (if (and (null TeX-texify-Show)
-	     (equal nextCmd TeX-command-Show))
-	(when  (called-interactively-p 'any)
-	  (message "TeX-texify: Nothing to be done."))
-      (TeX-command nextCmd 'TeX-master-file)
-      (when (or (called-interactively-p 'any)
-		(null (boundp 'TeX-texify-count-same-command))
-		(null (boundp 'TeX-texify-last-command))
-		(null (equal nextCmd TeX-texify-last-command)))
-	(mapc 'make-local-variable '(TeX-texify-sentinel TeX-texify-count-same-command TeX-texify-last-command))
-	(setq TeX-texify-count-same-command 1))
-      (if (>= TeX-texify-count-same-command TeX-texify-max-runs-same-command)
-	  (message "TeX-texify: Did %S already %d times. Don't want to do it anymore." TeX-texify-last-command TeX-texify-count-same-command)
-	(setq TeX-texify-count-same-command (1+ TeX-texify-count-same-command))
-	(setq TeX-texify-last-command nextCmd)
-	(and (null (equal nextCmd TeX-command-Show))
-	     (setq proc (get-buffer-process (current-buffer)))
-	     (setq TeX-texify-sentinel (process-sentinel proc))
-	     (set-process-sentinel proc 'TeX-texify-sentinel))))))
-
-(add-hook 'LaTeX-mode-hook '(lambda () (local-set-key (kbd "C-c C-y") 'TeX-texify)))
-
-;; Run make.bat file.  For particular use to run makeindex.
-(if (system-is-windows)
-(defun make()
-   (interactive)
-   (TeX-save-document (TeX-master-file)) ;; From tex-buf.el.
-   (shell-command (concat "make.bat "
-       (file-name-sans-extension buffer-file-name))))
-)
-
-(defun TeX-remove-macro ()
-  "Remove current macro and return `t'.  If no macro at point,
-return `nil'."
-  (interactive)
-  (when (TeX-current-macro)
-    (let ((bounds (TeX-find-macro-boundaries))
-          (brace  (save-excursion
-                    (goto-char (1- (TeX-find-macro-end)))
-                    (TeX-find-opening-brace))))
-      (delete-region (1- (cdr bounds)) (cdr bounds))
-      (delete-region (car bounds) (1+ brace)))
-    t))
-
-; (eval-after-load "tex"
-; '(local-set-key (kbd "M-DEL") 'mg-TeX-delete-current-macro))
-; The latter didn't override the default M-DEL (backward-kill-word),
-;; so try making it global.  NB: M-DEL = M-backspace.
-(global-set-key (kbd "M-DEL") 'TeX-remove-macro)
-
-;; My simplified version of TeX-home-buffer.
-;; Just go to master buffer.
-(defun TeX-master-buffer ()
-  "Go to the master TeX file."
-  (interactive)
-      (find-file (TeX-master-file TeX-default-extension))
-)
-(add-hook 'LaTeX-mode-hook '(lambda ()
-                            (local-set-key (kbd "C-c ^")
-                            'TeX-master-buffer)))
-
-;; http://mbork.pl/2016-07-04_Compiling_a_single_Beamer_frame_in_AUCTeX
-;; LaTeX current slide as _region-.tex (useful for bib Beamer files).
-;; Can add advice to avoid having to press enter on LaTeX command.
-(defun LaTeX-command-beamer-frame ()
-  "Run `TeX-command-region' on the current frame environment."
-  (interactive)
-  (save-mark-and-excursion
-    (while (not (looking-at-p "\\\\begin *{frame}"))
-      (LaTeX-find-matching-begin))
-    (forward-char)
-    (LaTeX-mark-environment)
-    (TeX-command-region)))
-
-
-;; -------------------------------------------------
-;; http://www.emacswiki.org/emacs/TransposeWindows
-;; Ideally, want prefix arg to reverse order of rotation - TODO.
-(defun rotate-windows ()
-  "Rotate your windows"
-  (interactive)
-  (cond
-   ((not (> (count-windows) 1))
-    (message "You can't rotate a single window!"))
-   (t
-    (let ((i 1)
-          (num-windows (count-windows)))
-      (while  (< i num-windows)
-        (let* ((w1 (elt (window-list) i))
-               (w2 (elt (window-list) (+ (% i num-windows) 1)))
-               (b1 (window-buffer w1))
-               (b2 (window-buffer w2))
-               (s1 (window-start w1))
-               (s2 (window-start w2)))
-          (set-window-buffer w1 b2)
-          (set-window-buffer w2 b1)
-          (set-window-start w1 s2)
-          (set-window-start w2 s1)
-          (setq i (1+ i))))))))
-(global-set-key (kbd "<C-f7>") 'rotate-windows)
-
-;; Printing
-;; http://www.emacswiki.org/cgi-bin/wiki/PrintingFromEmacs
-
-(if (system-is-windows)
-(progn
-(setq ps-lpr-command "c:/Program Files/gs/gs9.05/bin/gswin64c.exe")
-(setq ps-lpr-switches '("-q" "-dNOPAUSE" "-dBATCH" "-sDEVICE=mswinpr2" "-sPAPERSIZE#a4"))
-(setq ps-printer-name t)
-(setq ps-print-header nil)
-; (setq ps-header-lines 1)
-))
 
 ;; Summing a column
 ;; http://www.emacswiki.org/emacs/RectangleAdd (renamed to *sum).
@@ -3657,9 +3425,7 @@ return `nil'."
 ("\\paragraph{%s}" . "\\paragraph*{%s}")
 ("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
 
-;; https://blog.karssen.org/2013/08/22/using-bibtex-from-org-mode/
-;; Use latexmk for PDF export
-(setq org-latex-pdf-process (list "latexmk -pdf %f"))
+ 
 
 ;; Next line seems needed to make org functions available outside org,
 ;; before org has been invoked (C-c d above).
@@ -3981,13 +3747,14 @@ table, obtained by prompting the user."
  '(anzu-search-threshold 1000)
  '(package-selected-packages
    (quote
-    (goto-chg wttrin char-menu dired-quick-sort elfeed-goodies elfeed try yasnippet wrap-region which-key wgrep wc-mode use-package switch-window smex shell-pop shrink-whitespace ripgrep ox-pandoc matlab-mode macrostep latex-extra imenu-anywhere ibuffer-vc hydra helm-bibtex helm git-timemachine diminish deft define-word counsel clippy bug-hunter browse-kill-ring bind-key auctex-latexmk auctex anzu ace-window ace-link ace-jump-zap ace-jump-mode ace-jump-buffer))))
+    (auto-yasnippet ace-pinyin goto-chg wttrin char-menu dired-quick-sort elfeed-goodies elfeed try yasnippet wrap-region which-key wgrep wc-mode use-package switch-window smex shell-pop shrink-whitespace ripgrep ox-pandoc matlab-mode macrostep latex-extra imenu-anywhere ibuffer-vc hydra helm-bibtex helm git-timemachine diminish deft define-word counsel clippy bug-hunter browse-kill-ring bind-key auctex anzu ace-window ace-link ace-jump-zap ace-jump-mode ace-jump-buffer))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  )
+ 
  
 
  ;; Local Variables:
