@@ -1,12 +1,91 @@
-; -*- coding: utf-8 orgstruct-heading-prefix-regexp: ";;; "; -*-
-
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-;;;*Initialization
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
- 
+;; -*- coding: utf-8; lexical-binding: t; -*-
 (setq confirm-nonexistent-file-or-buffer nil)
+;; Added by Package.el.  This must come before configurations of
+;; installed packages.  Don't delete this line.  If you don't want it,
+;; just comment it out by adding a semicolon to the start of the line.
+;; You may delete these explanatory comments.
+;; (defadvice package-initialize (after my-init-load-path activate)
+;;   "Reset `load-path'."
+;;   (push (expand-file-name "~/.emacs.d/lisp") load-path))
+(package-initialize)
+(push (expand-file-name "~/.emacs.d/lisp") load-path)
 
+(let* ((minver "24.4"))
+  (when (version< emacs-version minver)
+    (error "Emacs v%s or higher is required." minver)))
+
+(defvar best-gc-cons-threshold
+  4000000
+  "Best default gc threshold value.  Should NOT be too big!")
+
+;; don't GC during startup to save time
+(setq gc-cons-threshold most-positive-fixnum)
+
+(setq emacs-load-start-time (current-time))
+
+;; {{ emergency security fix
+;; https://bugs.debian.org/766397
+(eval-after-load "enriched"
+  '(defun enriched-decode-display-prop (start end &optional param)
+     (list start end)))
+;; }}
+;;----------------------------------------------------------------------------
+;; Which functionality to enable (use t or nil for true and false)
+;;----------------------------------------------------------------------------
+(setq *is-a-mac* (eq system-type 'darwin))
+(setq *win64* (eq system-type 'windows-nt))
+(setq *cygwin* (eq system-type 'cygwin) )
+(setq *linux* (or (eq system-type 'gnu/linux) (eq system-type 'linux)) )
+(setq *unix* (or *linux* (eq system-type 'usg-unix-v) (eq system-type 'berkeley-unix)) )
+(setq *emacs24* (>= emacs-major-version 24))
+(setq *emacs25* (>= emacs-major-version 25))
+(setq *emacs26* (>= emacs-major-version 26))
+(setq *no-memory* (cond
+                   (*is-a-mac*
+                    (< (string-to-number (nth 1 (split-string (shell-command-to-string "sysctl hw.physmem")))) 4000000000))
+                   (*linux* nil)
+                   (t nil)))
+
+;; @see https://www.reddit.com/r/emacs/comments/55ork0/is_emacs_251_noticeably_slower_than_245_on_windows/
+;; Emacs 25 does gc too frequently
+(when *emacs25*
+  ;; (setq garbage-collection-messages t) ; for debug
+  (setq best-gc-cons-threshold (* 64 1024 1024))
+  (setq gc-cons-percentage 0.5)
+  (run-with-idle-timer 5 t #'garbage-collect))
+
+(defmacro local-require (pkg)
+  `(unless (featurep ,pkg)
+     (load (expand-file-name
+             (cond
+               ((eq ,pkg 'bookmark+)
+                (format "~/.emacs.d/site-lisp/bookmark-plus/%s" ,pkg))
+               ((eq ,pkg 'go-mode-load)
+                (format "~/.emacs.d/site-lisp/go-mode/%s" ,pkg))
+               (t
+                 (format "~/.emacs.d/site-lisp/%s/%s" ,pkg ,pkg))))
+           t t)))
+
+;; *Message* buffer should be writable in 24.4+
+(defadvice switch-to-buffer (after switch-to-buffer-after-hack activate)
+  (if (string= "*Messages*" (buffer-name))
+      (read-only-mode -1)))
+			   
+;----------------------------------------------------------------
+;;;*Initialization
+;---------------------------------------------------------------- 
+;;----Package initialization & package sources
+(require 'package)
+(setq package-archives
+      '(
+        ("orgmode" . "https://orgmode.org/elpa/")
+        ;("melpa" . "http://melpa.org/packages/")
+		("gnu" . "http://elpa.gnu.org/packages/");  Only for AucTeX.
+		("melpa-cn" . "http://elpa.emacs-china.org/melpa/")
+        ;("org-cn"   . "http://elpa.emacs-china.org/org/")
+        ;("gnu-cn"   . "http://elpa.emacs-china.org/gnu/")
+        ))
+(package-initialize)
 
 
 ;; Next line necessary after 10-12-17 package update.  let-alist was
@@ -16,56 +95,31 @@
 (require 'seq)
 (require 'cl)  ;; Temporary: to get loop macro, needed just below.
                ;; I think cl is automaticaly loaded by something else.
-			   
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-;;;* Package initialization & package sources
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-(require 'package)
-(setq package-archives
-      '(
-        ("orgmode" . "https://orgmode.org/elpa/")
-        ("melpa" . "http://melpa.org/packages/")
-        ("gnu" . "http://elpa.gnu.org/packages/");  Only for AucTeX.
-        ))
-(package-initialize)
-
 ;; http://batsov.com/articles/2012/02/19/package-management-in-emacs-the-good-the-bad-and-the-ugly/
 ;; http://y.tsutsumi.io/emacs-from-scratch-part-2-package-management.html
 (defvar required-packages
   '(ace-jump-buffer ace-jump-mode ace-jump-zap ace-link ace-window anzu 
-     auctex     
+     auctex  org    
     auctex-latexmk bind-key
     browse-kill-ring bug-hunter clippy counsel dash define-word deft diminish
     ;;dired-quick-sort edit-server elfeed elfeed-goodies expand-region
-    git-timemachine helm helm-bibtex hydra ibuffer-vc imenu-anywhere ivy
+    git-timemachine  ivy-bibtex hydra ibuffer-vc imenu-anywhere ivy
     latex-extra macrostep magit matlab-mode ox-pandoc ripgrep
     s shrink-whitespace shell-pop smex swiper switch-window
-    use-package wc-mode wgrep which-key wrap-region yasnippet)
+    use-package wc-mode wgrep which-key wrap-region yasnippet
+	)
   "A list of packages to ensure are installed at launch.")
 
+
   
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;-------------------------------------------------   
 ;;; * Add my elisp directory and other files
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-;;from n j higham
-;; For packages I've downloaded.
-;;(add-to-list 'load-path "~/Dropbox/elisp")
-;; (if (version< emacs-version "25.0")
-;;      ;; Now included in Emacs 25.
-;;       (use-package seq
-;;         :load-path "~/dropbox/elisp/old/seq"
-;;       )
-;; )
-
-;;Sometimes I load files outside the package system. As long as they're in a directory in my load-path, Emacs can find them.
-;;http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed
-(add-to-list 'load-path "~/.emacs.d/lisp")
-
+;-------------------------------------------------    
 ;;(setq use-package-enable-imenu-support t)
-(setq use-package-verbose t)  ;; Show package load times.if the package takes longer than 0.1s to load, you will see a message.以便调整设置，加快启动 
-(setq use-package-compute-statistics  t)  ;; 想查看已加载的软件包数量，它们已达到的初始化阶段以及它们花费的总时间（大致）.
+
+;; 想查看已加载的软件包数量，它们已达到的初始化阶段以及它们花费的总时间（大致）.
+(setq use-package-compute-statistics  t)  
+
 (defun required-packages-installed-p ()
   (loop for p in required-packages
         when (not (package-installed-p p)) do (return nil)
@@ -85,29 +139,43 @@
 ;; (add-to-list 'load-path "~/Dropbox/elisp/use-package-master")
 (unless (package-installed-p 'use-package)
   (package-install 'use-package))
-(require 'diminish)
-(require 'bind-key)
+  (setq use-package-verbose t)  ;; Show package load times.if the package takes longer than 0.1s to load,
+                               ;; you will see a message.以便调整设置，加快启动 
+							   
+(setq use-package-always-ensure t) ;;默认安装 
 
+;;Sometimes I load files outside the package system. 
+;;As long as they're in a directory in my load-path, Emacs can find them.
+;;http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed
+(add-to-list 'load-path "~/.emacs.d/lisp")
+
+(setq custom-file "~/.emacs.d/custom-settings.el")
+(load custom-file t) 
+
+(require 'use-package)
 
 ;;https://github.com/emacscollective/auto-compile
-(use-package auto-compile             ;;Automatically compile Emacs Lisp libraries
-  :ensure t 
+(use-package auto-compile  ;;Automatically compile Emacs Lisp libraries
+  :defer t
   :config (auto-compile-on-load-mode))
- (setq load-prefer-newer t)          ;;these modes guarantee that Emacs never loads outdated byte code files.
 
+;;these modes guarantee that Emacs never loads outdated byte code files.  
+(setq load-prefer-newer t) 
+
+(require 'diminish)
+(require 'bind-key)
 (bind-key* "C-z" 'scroll-up-keep-cursor)
 
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;--------------------------------------------  
 ;;; * Load secrets
-;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-;;I keep slightly more sensitive information in a separate file so that I can easily publish my main configuration.
+;-------------------------------------------- 
+;;I keep slightly more sensitive information in a separate file 
+;;so that I can easily publish my main configuration.
 (load "~/.emacs.secrets" t)
 
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;--------------------------------------------- 
 ;;; * Packages
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
+;---------------------------------------------   
 
 ;; http://endlessparentheses.com/debug-your-emacs-init-file-with-the-bug-hunter.html
 ;; M-x bug-hunter-file [gives error about auctex].
@@ -170,20 +238,753 @@
 "Return true if the system we are running on iMac"
 (string-equal system-name "Nick-iMac.local"))
 
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------
 ;;; * General configuration
-;-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------
 
-;-------------------------------------------------------Libraries ---------------------------------------------------------------------------------------------
+;--Libraries ----------------------------
 ;;Neatly load some packages 
-;; Dash is needed by ace-jump-buffer and wrap-region.If :defer on next line then ace-jump-buffer doesn't work.
+;; Dash is needed by ace-jump-buffer and wrap-region.
+;;If :defer on next line then ace-jump-buffer doesn't work.
+;;此包用在macbook上调用dash应用的功能，其他操作系统可以不用
 (use-package dash) ;;                    :load-path "~/dropbox/elisp/dash")
 (use-package s ) ;;          :defer t    :load-path "~/Dropbox/elisp/s") The long lost Emacs string manipulation library.
+			 
+;; 	
+;;-----------------emacs基础，-------------------------
+;;--------- Windows Configuration 
+(setq inhibit-splash-screen t)       ; Don't want splash screen.
+(setq inhibit-startup-message t)     ; Don't want any startup message.
+(scroll-bar-mode 0 )                 ; Turn off scrollbars.
+(tool-bar-mode 0)                  ; Turn off toolbars. (Although I changed my mind about the menu - I want that again. -----sacha chua)
+(menu-bar-mode 0)                   ; No menus, but can turn back on with keypress.
+(global-set-key (kbd "<C-M-f2>") 'menu-bar-mode)
+(fringe-mode 0)                      ; Turn off left and right fringe cols.
+(size-indication-mode)               ; Show file size in status line.
+(put 'dired-find-alternate-file 'disabled nil)
+(mouse-avoidance-mode 'exile)        ; Move mouse pointer out of way of cursor.
+(setq visible-bell 1)                ; Turn off sound.
+
+(display-time-mode 1)              ;Time in the modeline   the clock 
+(fset 'yes-or-no-p 'y-or-n-p)        ; Change yes/no questions to y/n type.	
+(electric-pair-mode t)   ;; 自动添加括号
+;(use-package smart-mode-line
+;;    :ensure t)         ;Display a more compact mode line    ???have a problem
+;; http://pages.sachachua.com/.emacs.d/Sacha.html
+
+(setq cursor-type 'bar)
+(show-paren-mode 1)
+
+;; Show line-number in the mode line
+(line-number-mode 1)
+
+;; Show column-number in the mode line
+(column-number-mode 1)
+
+;; Use spaces instead of tabs.
+(setq-default indent-tabs-mode nil)
+
+;; Keep point at the same screen position when scrolling.
+(setq scroll-preserve-screen-position 1)
+
+;;设置打开文件的缺省路径，这里为桌面，默认的路径为“～/” 
+;;(setq default-directory "～/e:/") 
+;;还不会设置
+
+;;------navigation---------------------导航
+
+;;一个Frame中打开多个windows后，可以通过增加如下配置，以达到在多个windows中进行跳转；
+;;当窗口比较多时，可以直接使用 =(C-x o)= 进行快速跳转；
+(use-package windmove
+    :defer t
+    :bind
+    (("<f1> <right>" . windmove-right)
+     ("<f1> <left>" . windmove-left)
+     ("<f1> <up>" . windmove-up)
+     ("<f1> <down>" . windmove-down)
+     ))
+
+;; for more window movement
+(use-package switch-window
+    :defer t
+    :bind (("C-x o" . switch-window)))
 
 
-;------------------------------------------------------ Backups --------------------------------------------------------------------------------------------  
-;;有点啰嗦，抽空简化。可参考http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed
+;; Quicker window splitting
+(global-set-key (kbd "C-M-0") 'delete-window) ; was digit-argument
+(global-set-key (kbd "M-1")   'delete-other-windows) ; was digit-argument
+; (global-set-key (kbd "M-u")   'delete-other-windows) ; u for "unique"
+(global-set-key (kbd "M-2")   'split-window-vertically) ; was digit-argument
+(global-set-key (kbd "M-3")   'split-window-horizontally) ; was digit-argument
+; (global-set-key [f2]          'other-window)
 
+(global-set-key (kbd "C-x ,") 'shrink-window)
+(global-set-key (kbd "C-x .") 'enlarge-window) ; was set-fill-prefix
+
+;; Different from C-M-0 when more than 2 windows.
+(global-set-key [C-f2]
+  '(lambda () (interactive) (other-window 1) (delete-other-windows)))
+
+(global-set-key [C-f12]      'list-matching-lines)
+(global-set-key [M-C-f12]    'toggle-frame-fullscreen)
+
+;; Use M-f5 Hydra instead now
+;; (global-set-key [S-C-f12]    'text-scale-adjust)	
+
+
+
+;;How to change the default split-screen direction? 如何更改默认分屏方向？
+;;https://stackoverflow.com/questions/7997590/how-to-change-the-default-split-screen-direction
+;;(setq split-height-threshold nil)
+;;(setq split-width-threshold 0)
+
+
+
+;;(setq split-width-threshold nil) ;;for vertical split.
+(setq split-width-threshold 1 )   ;;for horizontal split.
+
+
+;;--------Ace-isearch     搜索能力的提升
+;;Ace-isearch为集成了isearch, ace-jump-mode, avy, helm-swoop四个模式为一体的更方便的搜索体验。
+;;Ace-isearch会根据输入的内容长度，来判断采用哪种模式。
+;;The "default" behavior can be summrized as:
+;;    + L = 1 : ace-jump-mode or avy
+;;    + 1 < L < 6 : isearch
+;;    + L >= 6 : helm-swoop	 
+
+;;不想使用helm，所以未安装ace-isearch, 改做安装isearch, ace-jump-mode, avy.
+(use-package isearch
+  :ensure nil 
+  :bind (("C-M-r" . isearch-backward-other-window)
+         ("C-M-s" . isearch-forward-other-window))
+  :bind (:map isearch-mode-map
+              ("C-c" . isearch-toggle-case-fold)
+              ("C-t" . isearch-toggle-regexp)
+              ("C-^" . isearch-edit-string)
+              ("C-i" . isearch-complete))
+  :preface
+  (defun isearch-backward-other-window ()
+    (interactive)
+    (split-window-vertically)
+    (other-window 1)
+    (call-interactively 'isearch-backward))
+
+  (defun isearch-forward-other-window ()
+    (interactive)
+    (split-window-vertically)
+    (other-window 1)
+    (call-interactively 'isearch-forward)))
+
+(use-package ace-jump-mode
+  :defer t)
+
+(use-package ace-link
+  :disabled t
+  :defer 10
+  :bind ("C-c M-o" . ace-link-addr)
+  :config
+  (ace-link-setup-default)
+
+  (add-hook 'org-mode-hook
+            #'(lambda () (bind-key "C-c C-o" #'ace-link-org org-mode-map)))
+  (add-hook 'gnus-summary-mode-hook
+            #'(lambda () (bind-key "M-o" #'ace-link-gnus gnus-summary-mode-map)))
+  (add-hook 'gnus-article-mode-hook
+            #'(lambda () (bind-key "M-o" #'ace-link-gnus gnus-article-mode-map)))
+  (add-hook 'ert-results-mode-hook
+            #'(lambda () (bind-key "o" #'ace-link-help ert-results-mode-map)))
+  (add-hook 'eww-mode-hook
+            #'(lambda () (bind-key "f" #'ace-link-eww eww-mode-map))))
+
+(use-package ace-mc
+  :bind (("<C-m> h"   . ace-mc-add-multiple-cursors)
+         ("<C-m> M-h" . ace-mc-add-single-cursor)))
+
+(use-package ace-window
+  :bind* ("<C-return>" . ace-window))
+
+(use-package avy
+  :bind* ("C-." . avy-goto-char-timer)
+  :config
+  (avy-setup-default))
+
+(use-package avy-zap
+  :bind (("M-z" . avy-zap-to-char-dwim)
+         ("M-Z" . avy-zap-up-to-char-dwim)))
+
+		 
+;;---------------------------------------------
+(use-package align
+  :bind (("M-["   . align-code)
+         ("C-c [" . align-regexp))
+  :commands align
+  :preface
+  (defun align-code (beg end &optional arg)
+    (interactive "rP")
+    (if (null arg)
+        (align beg end)
+      (let ((end-mark (copy-marker end)))
+        (indent-region beg end-mark nil)
+        (align beg end-mark)))))
+  
+;;---Wgrep-----writeable global search a regular expression 可写的全局正则表达搜索，文本搜索
+;;Wgrep是一个可以允许我们在grep模式下进行直接修改的工具，可以允许我们批量添加上Multiple cursors，
+;;然后进行批量修改的工具。在快速修改文件时非常方便，类似于sed的批量匹配，批量修改。
+
+(use-package wgrep
+  ;;:ensure t  
+  :defer t  ;;delay 
+    )
+
+(use-package wgrep-ag
+    :defer t
+;;  :ensure t 
+)
+
+
+;;-------visual  
+;---Winner mode - undo and redo window configuration  撤消和重做窗口配置
+
+;;winner-mode lets you use C-c <left> and C-c <right> to switch between window configurations. 
+;;This is handy when something has popped up a buffer that you want to look at briefly before returning to whatever you were working on. 
+;;When you're done, press C-c <left>.
+(use-package winner
+  :defer t)
+
+  
+;---undo-tree 
+;People often struggle with the Emacs undo model, where there's really no concept of "redo" - you simply undo the undo.
+;This lets you use C-x u (undo-tree-visualize) to visually walk through the changes you've made, 
+;undo back to a certain point (or redo), and go down different branches.
+;允许我们可视化地遍历您所做的更改，撤销到某个特定的点(或重做)，并沿着不同的分支进行操作。
+(use-package  undo-tree 
+  :ensure  t 
+  :init 
+    (global-undo-tree-mode ))
+
+;; --------Hydra                                    ;;  drill  20181128  
+;;https://www.youtube.com/watch?v=ONHEDj3kWrE 作者视频讲解
+;; (add-to-list 'load-path "~/dropbox/elisp/hydra")
+(use-package hydra
+  :config
+  (global-set-key (kbd "C-x m") 'hydra-major/body)
+  (global-set-key (kbd "<f3>")   'hydra-bib-etc/body)
+  (global-set-key (kbd "C-<f3>") 'hydra-dired/body)
+)
+
+(defhydra hydra-major (:color blue :columns 4)
+  "major-mode"
+  ("b" bibtex-mode "bibtex")
+  ("l" latex-mode "latex")
+  ("o" org-mode "org")
+  ("s" lisp-mode "lisp")
+  ("t" text-mode "text")
+  ("c" 'toggle-truncate-lines "tog-trunc-lines")
+  ("f" auto-fill-mode "auto-fill")
+  ("h" html-mode "html")
+  ("m" message-mode "msg")
+  ("n" narrow-or-widen-dwim "narw-wide") 
+  ("r" read-only-mode "read-only")
+  ("u" linum-mode "lin-num")
+  ("q" nil "cancel")
+)
+(defhydra hydra-bib-etc (:color blue :columns 4)
+  "bib"
+  ("<f3>" ivy-bibtex "ivy-bibtex")
+  ("<f4>" ivy-resume "ivy-resume")
+  ("b"
+   (lambda () (interactive) (dired "~/bib"))
+   "bib")
+  ("d"
+   (lambda () (interactive) (dired "~/texmf/bibtex/bib"))
+   "texmf/bib")
+  ("c"
+   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/cut.bib"))
+   "cut")
+  ("l"
+   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/la.bib"))
+    "la")
+  ("h"
+   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/njhigham.bib"))
+   "higham")
+   ("m"
+    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/misc.bib"))
+    "misc")
+   ("e"
+    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/ode.bib"))
+    "ode")
+  ("o"
+    (lambda () (interactive) (switch-to-buffer "*org*"))
+    "org*")
+   ("s"
+    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/strings.bib"))
+    "strings")
+   ("x"
+    (lambda () (interactive) (switch-to-buffer "*scratch*"))
+    "scratch*")
+   ("t"
+    (lambda () (interactive) (switch-to-buffer "*text*"))
+    "text*")
+   ("z" scratch "scratch-make")
+)
+
+(defhydra hydra-dired (:color blue)
+   "dired"
+  ("m"
+   (lambda () (interactive) (dired "~/memo"))
+   "memo")
+  ("t"
+   (lambda () (interactive) (dired "~/tex"))
+   "tex")
+  ("b"
+   (lambda () (interactive) (dired "~/matlab"))
+   "matlab")
+ ;; ("d"
+  ;; (lambda () (interactive) (dired "~/dropbox"))
+  ;; "dropbox")
+  ("h"
+   (lambda () (interactive) (dired "~/"))
+   "home")
+)
+
+(global-set-key (kbd "M-<f5>")   'hydra-zoom/body)
+(defhydra hydra-zoom (:color red)
+    "zoom"
+    ("g" text-scale-increase "in")
+    ("l" text-scale-decrease "out")
+    ("r" (text-scale-adjust 0) "reset")
+    ;; ("r" (lambda () (interactive) (text-scale-adjust 0)) "reset")
+    ("q" nil "quit"))
+
+;; http://ericjmritz.name/2015/10/14/some-personal-hydras-for-gnu-emacs/
+(defhydra hydra-move-org (:color red :columns 3)
+  "Org movements"
+  ("n" outline-next-visible-heading "next heading")
+  ("p" outline-previous-visible-heading "prev heading")
+  ("N" org-forward-heading-same-level "next heading at same level")
+  ("P" org-backward-heading-same-level "prev heading at same level")
+  ("u" outline-up-heading "up heading")
+  ("g" org-goto "goto" :exit t))
+(global-set-key (kbd "M-<f9>") 'hydra-move-org/body)
+
+;; Hydra for modes that toggle on and off
+(global-set-key
+ (kbd "C-x t")
+ (defhydra toggle (:color blue)
+   "toggle"
+   ("a" abbrev-mode "abbrev")
+   ("s" flyspell-mode "flyspell")
+   ("d" toggle-debug-on-error "debug")
+   ("c" fci-mode "fCi")
+   ("f" auto-fill-mode "fill")
+   ("t" toggle-truncate-lines "truncate")
+   ("w" whitespace-mode "whitespace")
+   ("q" nil "cancel")))
+
+;; Hydra for navigation
+(global-set-key
+ (kbd "C-x j")
+ (defhydra gotoline 
+   ( :pre (linum-mode 1)
+	  :post (linum-mode -1))
+   "goto"
+   ("t" (lambda () (interactive)(move-to-window-line-top-bottom 0)) "top")
+   ("b" (lambda () (interactive)(move-to-window-line-top-bottom -1)) "bottom")
+   ("m" (lambda () (interactive)(move-to-window-line-top-bottom)) "middle")
+   ("e" (lambda () (interactive)(end-of-buffer)) "end")
+   ("c" recenter-top-bottom "recenter")
+   ("n" next-line "down")
+   ("p" (lambda () (interactive) (forward-line -1))  "up")
+   ("g" goto-line "goto-line")
+   ))
+
+;; Hydra for some org-mode stuff
+(global-set-key
+ (kbd "C-c t")
+ (defhydra hydra-global-org (:color blue)
+   "Org"
+   ("t" org-timer-start "Start Timer")
+   ("s" org-timer-stop "Stop Timer")
+   ("r" org-timer-set-timer "Set Timer") ; This one requires you be in an orgmode doc, as it sets the timer for the header
+   ("p" org-timer "Print Timer") ; output timer value to buffer
+   ("w" (org-clock-in '(4)) "Clock-In") ; used with (org-clock-persistence-insinuate) (setq org-clock-persist t)
+   ("o" org-clock-out "Clock-Out") ; you might also want (setq org-log-note-clock-out t)
+   ("j" org-clock-goto "Clock Goto") ; global visit the clocked task
+   ("c" org-capture "Capture") ; Don't forget to define the captures you want http://orgmode.org/manual/Capture.htmlhttp://orgmode.org/manual/Capture.html
+   ("l" (or )rg-capture-goto-last-stored "Last Capture")))
+   
+   (defhydra mz/hydra-elfeed ()
+   "filter"
+   ("c" (elfeed-search-set-filter "@6-months-ago +cs") "cs")
+   ("e" (elfeed-search-set-filter "@6-months-ago +emacs") "emacs")
+   ("d" (elfeed-search-set-filter "@6-months-ago +education") "education")
+   ("*" (elfeed-search-set-filter "@6-months-ago +star") "Starred")
+   ("M" elfeed-toggle-star "Mark")
+   ("A" (elfeed-search-set-filter "@6-months-ago") "All")
+   ("T" (elfeed-search-set-filter "@1-day-ago") "Today")
+   ("Q" bjm/elfeed-save-db-and-bury "Quit Elfeed" :color blue)
+   ("q" nil "quit" :color blue)
+   )
+   
+   (defhydra imalison:hydra-font
+  nil
+  "Font Settings"
+  ("-" imalison:font-size-decr "Decrease")
+  ("d" imalison:font-size-decr "Decrease")
+  ("=" imalison:font-size-incr "Increase")
+  ("+" imalison:font-size-incr "Increase")
+  ("i" imalison:font-size-incr "Increase")
+  ("h" imalison:set-huge-font-size "Huge")
+  ("a" imalison:appearance "Set Default Appearance")
+  ("f" set-frame-font "Set Frame Font")
+  ("0" imalison:font-size-reset "Reset to default size")
+  ("8" imalison:font-size-80chars "80 chars 3 columns font size"))
+
+
+;;----dired  文件管理器  (builded in)
+;;Melpa最近删除了wiki包。
+;;你需要从wiki中获取dired +然后自己加载它。
+;;https://www.reddit.com/r/emacs/comments/7vocqa/update_on_melpa_removing_emacswiki_packages_they/
+
+;;from  
+(use-package diredfl )
+	
+;--which-key--or--guide-key
+;Help It's hard to remember keyboard shortcuts. The guide-key package pops up help after a short delay.	
+(use-package which-key
+  ;; :load-path "~/dropbox/elisp/which-key"
+  ;;:defer 0.2                ;和guide-key功能相同？
+  ;;:config
+  ;; (setq guide-key/highlight-command-regexp "rectangle")
+  ;;(which-key-mode)
+  ;;(which-key-setup-minibuffer)
+)
+	
+;The guide-key可以帮助我们查看操作的快捷键，对于一些不太常用的快捷键想不起来的时候，
+;可以输入快捷键的前缀后，暂停一下，Emacs即会弹出一个子窗口，
+;列出当前前缀下可以选择的快捷键，及其函数名称。以方便我们进行查找。
+(use-package guide-key
+  :defer t
+  :diminish guide-key-mode
+  :config
+  (progn
+  (setq guide-key/guide-key-sequence '("C-x r" "C-x 4" "C-c"))
+  (guide-key-mode 1)))  ; Enable guide-key-mode
+  
+ 
+;;;-------------completion---------------------
+;;     company  ; the ultimate code completion backend
+;;     ido      ; the other *other* search engine...
+;;     helm     ; the *other* search engine for love and life ( helm to ivy  since 20181205)
+;;     ivy      ; a search engine for love and life
+	  
+;;----company                    
+(use-package company      ;;the ultimate code completion backend 
+   :ensure t
+   :config
+      (setq company-idle-delay 0)
+      (setq company-minimum-prefix-length 3)
+)   
+(global-company-mode t) 
+
+;;-----ido
+;;https://www.masteringemacs.org/article/introduction-to-ido-mode
+;;Ido工具是为在窗口下面的状态栏中选择、显示时更清晰，操作更方便，
+;;并支持模糊匹配选择，这里只保留选择文件时启动ido 。
+
+;; Use C-f during file selection to switch to regular find-file
+
+(setq ido-enable-flex-matching t)
+(setq ido-everywhere t)
+(ido-mode t)
+(setq ido-auto-merge-work-directories-length 0)
+(setq ido-create-new-buffer 'always)
+(setq ido-enable-tramp-completion nil)
+(setq ido-max-directory-size 1000000)
+(setq ido-use-filename-at-point 'guess)  ;; Great on URL!
+(setq ido-use-url-at-point t)
+(setq ido-use-virtual-buffers t)         ;; Uses old buffers from recentf.
+(setq ido-file-extensions-order '(".org" ".txt" ".py" ".emacs" ".xml" ".el" ".ini" ".cfg" ".cnf"))
+(setq ido-ignore-extensions t)
+
+;; For Mac: ignore .DS_Store files with ido mode
+(add-to-list 'ido-ignore-files "\\.DS_Store")
+
+;; http://whattheemacsd.com/
+;; Just press ~ to go home when in ido-find-file.
+(add-hook 'ido-setup-hook
+ (lambda ()
+   ;; Go straight home
+   (define-key ido-file-completion-map
+     (kbd "~")
+     (lambda ()
+       (interactive)
+       (if (looking-back "/")
+           (insert "~/")
+         (call-interactively 'self-insert-command))))))
+
+;;----smex 
+(use-package smex     ;;smex feels like part of ido or ivy ???? Smex是Emacs的Mx增强版。它建立在Ido之上
+  ;; :load-path "~/dropbox/elisp/smex-master"
+  ;;:init (smex-initialize) ;;随软件启动
+  :bind (("M-x" . smex)
+         ("M-X" . smex-major-mode-commands)
+         ;; Next is the old M-x.
+         ("C-c C-c M-x" . execute-extended-command))
+  :config
+  ;;(setq smex-save-file "~/dropbox/.smex-items")
+)
+
+;;--------- Flyspell: spell-checking.
+(use-package ispell
+  :no-require t
+  :bind (("C-c i c" . ispell-comments-and-strings)
+         ("C-c i d" . ispell-change-dictionary)
+         ("C-c i k" . ispell-kill-ispell)
+         ("C-c i m" . ispell-message)
+         ("C-c i r" . ispell-region)))
+		 		 
+;;--------ivy---swiper---counsel   
+;; Ivy relies on nothing. Swiper relies on Ivy, and Counsel relies on both Swiper and Ivy.
+;;ivy，ido和helm功能上有些重复，所以需要取舍，精简,完善 ！！！ 2018.11.28
+;;https://github.com/lujun9972/emacs-document/blob/master/emacs-common/%E4%BB%8EHelm%E5%88%B0Ivy.org
+;;Helm 和Ivy 都是补全框架.这意味着它们都是Emacs 生态系统中用来在用户输入后缩窄可供
+;; 选择选项的范围的工具。很自然而然想起的通用例子就是搜索文件。
+;;Helm 和Ivy 都可以帮助 用户快速搜索文件
+;;from https://www.reddit.com/r/emacs/comments/910pga/tip_how_to_use_ivy_and_its_utilities_in_your/
+
+;;https://github.com/jwiegley/dot-emacs/blob/80f70631c03b2dd4f49741478453eaf1a2fe469b/init.el
+(use-package ivy
+  :diminish
+  :demand t
+
+  :bind (("C-x b" . ivy-switch-buffer)
+         ("C-x B" . ivy-switch-buffer-other-window)
+         ("M-H"   . ivy-resume))
+
+  :bind (:map ivy-minibuffer-map
+              ("<tab>" . ivy-alt-done)
+              ("SPC"   . ivy-alt-done-or-space)
+              ("C-d"   . ivy-done-or-delete-char)
+              ("C-i"   . ivy-partial-or-done)
+              ("C-r"   . ivy-previous-line-or-history)
+              ("M-r"   . ivy-reverse-i-search))
+
+  :bind (:map ivy-switch-buffer-map
+              ("C-k" . ivy-switch-buffer-kill))
+
+  :custom
+  (ivy-dynamic-exhibit-delay-ms 200)
+  (ivy-height 10)
+  (ivy-initial-inputs-alist nil t)
+  (ivy-magic-tilde nil)
+  (ivy-re-builders-alist '((t . ivy--regex-ignore-order)))
+  (ivy-use-virtual-buffers t)
+  (ivy-wrap t)
+
+  :preface
+  (defun ivy-done-or-delete-char ()
+    (interactive)
+    (call-interactively
+     (if (eolp)
+         #'ivy-immediate-done
+       #'ivy-delete-char)))
+
+  (defun ivy-alt-done-or-space ()
+    (interactive)
+    (call-interactively
+     (if (= ivy--length 1)
+         #'ivy-alt-done
+       #'self-insert-command)))
+
+  (defun ivy-switch-buffer-kill ()
+    (interactive)
+    (debug)
+    (let ((bn (ivy-state-current ivy-last)))
+      (when (get-buffer bn)
+        (kill-buffer bn))
+      (unless (buffer-live-p (ivy-state-buffer ivy-last))
+        (setf (ivy-state-buffer ivy-last)
+              (with-ivy-window (current-buffer))))
+      (setq ivy--all-candidates (delete bn ivy--all-candidates))
+      (ivy--exhibit)))
+
+  ;; This is the value of `magit-completing-read-function', so that we see
+  ;; Magit's own sorting choices.
+  (defun my-ivy-completing-read (&rest args)
+    (let ((ivy-sort-functions-alist '((t . nil))))
+      (apply 'ivy-completing-read args)))
+
+  :config
+  (ivy-mode 1)
+  (ivy-set-occur 'ivy-switch-buffer 'ivy-switch-buffer-occur))
+
+
+(use-package ivy-bibtex
+  :defer t
+  :commands 'ivy-bibtex
+  )
+  
+  
+(use-package ivy-hydra
+  :after (ivy hydra)
+  :defer t)
+
+(use-package ivy-pass
+  :commands ivy-pass)
+
+
+
+(use-package ivy-rtags
+  :disabled t
+  :load-path "~/.nix-profile/share/emacs/site-lisp/rtags"
+  :after (ivy rtags))
+  
+(use-package ivy-rich
+  :after ivy
+  :demand t
+  :config
+  (ivy-rich-mode 1)
+  (setq ivy-virtual-abbreviate 'full
+        ivy-rich-switch-buffer-align-virtual-buffer t
+        ivy-rich-path-style 'abbrev))
+		
+
+(use-package counsel
+  :after ivy
+  :demand t
+  :diminish
+  :custom (counsel-find-file-ignore-regexp
+           (concat "\\(\\`\\.[^.]\\|"
+                   (regexp-opt completion-ignored-extensions)
+                   "\\'\\)"))
+  :bind (("C-*"     . counsel-org-agenda-headlines)
+         ("C-x C-f" . counsel-find-file)
+         ("C-c e l" . counsel-find-library)
+         ("C-c e q" . counsel-set-variable)
+         ;;("C-h e l" . counsel-find-library)
+         ;;("C-h e u" . counsel-unicode-char)
+         ("C-h f"   . counsel-describe-function)
+         ("C-x r b" . counsel-bookmark)
+         ("M-x"     . counsel-M-x)
+         ;; ("M-y"     . counsel-yank-pop)
+
+         ("M-s f" . counsel-file-jump)
+         ;; ("M-s g" . counsel-rg)
+         ("M-s j" . counsel-dired-jump))
+  :commands counsel-minibuffer-history
+  :init
+  (bind-key "M-r" #'counsel-minibuffer-history minibuffer-local-map)
+  :config
+  (add-to-list 'ivy-sort-matches-functions-alist
+               '(counsel-find-file . ivy--sort-files-by-date))
+
+  (defun counsel-recoll-function (string)
+    "Run recoll for STRING."
+    (if (< (length string) 3)
+        (counsel-more-chars 3)
+      (counsel--async-command
+       (format "recollq -t -b %s"
+               (shell-quote-argument string)))
+      nil))
+
+  (defun counsel-recoll (&optional initial-input)
+    "Search for a string in the recoll database.
+  You'll be given a list of files that match.
+  Selecting a file will launch `swiper' for that file.
+  INITIAL-INPUT can be given as the initial minibuffer input."
+    (interactive)
+    (counsel-require-program "recollq")
+    (ivy-read "recoll: " 'counsel-recoll-function
+              :initial-input initial-input
+              :dynamic-collection t
+              :history 'counsel-git-grep-history
+              :action (lambda (x)
+                        (when (string-match "file://\\(.*\\)\\'" x)
+                          (let ((file-name (match-string 1 x)))
+                            (find-file file-name)
+                            (unless (string-match "pdf$" x)
+                              (swiper ivy-text)))))
+              :unwind #'counsel-delete-process
+              :caller 'counsel-recoll)))
+
+(use-package counsel-dash
+  :bind ("C-c C-h" . counsel-dash))
+
+(use-package counsel-gtags
+  ;; jww (2017-12-10): Need to configure.
+  :disabled t
+  :after counsel)
+
+(use-package counsel-osx-app
+  :bind* ("S-M-SPC" . counsel-osx-app)
+  :commands counsel-osx-app
+  :config
+  (setq counsel-osx-app-location
+        (list "/Applications"
+              "/Applications/Misc"
+              "/Applications/Utilities"
+              (expand-file-name "~/Applications")
+              (expand-file-name "~/.nix-profile/Applications")
+              "/Applications/Xcode.app/Contents/Applications")))
+
+(use-package counsel-projectile
+  :after (counsel projectile)
+  :config
+  (counsel-projectile-mode 1))
+
+(use-package counsel-tramp
+  :commands counsel-tramp)
+  
+							   
+(use-package swiper
+  :after ivy
+  :bind (:map swiper-map
+              ("M-y" . yank)
+              ("M-%" . swiper-query-replace)
+              ("C-." . swiper-avy)
+              ;; ("M-c" . swiper-mc)
+              ("M-c" . haba/swiper-mc-fixed)
+              )
+  :bind (:map isearch-mode-map
+              ("C-o" . swiper-from-isearch))
+  :config
+  (defun haba/swiper-mc-fixed ()
+    (interactive)
+    (setq swiper--current-window-start nil)
+    (swiper-mc)))
+		 
+;;http://oremacs.com/swiper/		 
+;;Ivy-based interface to standard commands		 
+(global-set-key (kbd "M-x") 'counsel-M-x)
+(global-set-key (kbd "C-x C-f") 'counsel-find-file)
+(global-set-key (kbd "<f1> f") 'counsel-describe-function)
+(global-set-key (kbd "<f1> v") 'counsel-describe-variable)
+(global-set-key (kbd "<f1> l") 'counsel-find-library)
+
+
+;;Ivy-based interface to shell and system tools
+(global-set-key (kbd "C-c g") 'counsel-git)
+(global-set-key (kbd "C-c j") 'counsel-git-grep)
+(global-set-key (kbd "C-c k") 'counsel-ag)
+(global-set-key (kbd "C-x l") 'counsel-locate)
+(global-set-key (kbd "C-S-o") 'counsel-rhythmbox)
+
+;;ivy-resume resumes the last Ivy-based completion.
+(global-set-key (kbd "C-c C-r") 'ivy-resume)	
+
+;;This shows a custom regex builder assigned to file name completion:
+(setq ivy-re-builders-alist
+      '((read-file-name-internal . ivy--regex-fuzzy)
+        (t . ivy--regex-plus)))	
+		
+			 
+
+	
+
+;;----------------日常工作使用Emacs
+;;-------基础工具包的配置--init-daily-using
+;;---Emacs中的自动保存功能，单独存储在另一个文件夹中
 ;; http://stackoverflow.com/questions/151945/how-do-i-control-how-emacs-makes-backup-files
 (setq delete-old-versions t ; delete excess backup files silently
  delete-by-moving-to-trash t
@@ -209,7 +1010,9 @@
 ; (if (system-is-Chill) (setq my-backup-dest "r:/emacs_backups/") )
 (if (not (file-exists-p my-backup-dest))
         (make-directory my-backup-dest t))
-;; (make-directory my-backup-dest t)
+		
+;;----在常用编辑过程中，需要对Emacs配置自动备份功能，
+;;下面即为为自动保存配置一个自动保存的临时文件存储目录，配置自动备份
 (setq backup-directory-alist
           `((".*" . , my-backup-dest)))
 (setq auto-save-file-name-transforms   ;; Needed, else goes in curr dir!
@@ -226,7 +1029,8 @@
           `((".*" , "~/emacs_backups/" t)))
 ))
 
-;---------------------------------------------------------------- History --------------------------------------------------------------------------------
+;;---保存命令历史记录
+;;savehist命令则是对emacs日常操作中的执行历史记录的存储功能，存储下在使用过程中的历史记录 
 ;;From http://www.wisdomandwonder.com/wp-content/uploads/2014/03/C3F.html
 (setq savehist-file "~/.emacs.d/savehist")
 (savehist-mode 1)
@@ -238,160 +1042,15 @@
         search-ring
         regexp-search-ring))
 
-;------------------------------------------------------------Windows Configuration------------------------------------------------------------------ drill
-(setq inhibit-splash-screen t)       ; Don't want splash screen.
-(setq inhibit-startup-message t)     ; Don't want any startup message.
-(scroll-bar-mode 0 )                 ; Turn off scrollbars.
-;(tool-bar-mode 0)                    ; Turn off toolbars. (Although I changed my mind about the menu - I want that again. -----sacha chua)
-(fringe-mode 0)                      ; Turn off left and right fringe cols.
-(size-indication-mode)               ; Show file size in status line.
-(put 'dired-find-alternate-file 'disabled nil)
-(mouse-avoidance-mode 'exile)        ; Move mouse pointer out of way of cursor.
-(setq visible-bell 1)                ; Turn off sound.
-(menu-bar-mode 0)                   ; No menus, but can turn back on with keypress.
-(global-set-key (kbd "<C-M-f2>") 'menu-bar-mode)
-(display-time-mode 1)              ;Time in the modeline   the clock 
 
-;----------------------------------------------------Winner mode - undo and redo window configuration--------------------------------------------------------
-;;winner-mode lets you use C-c <left> and C-c <right> to switch between window configurations. 
-;;This is handy when something has popped up a buffer that you want to look at briefly before returning to whatever you were working on. 
-;;When you're done, press C-c <left>.
-(use-package winner
-  :defer t)
-
-;; ----------------Helm - interactive completion ------------------------------------------------
-;;from  http://pages.sachachua.com/.emacs.d/Sacha.html#unnumbered-14    
-;; http://writequit.org/org/settings.html#sec-1-34
-(use-package helm
-  :diminish helm-mode
-  :init
-  (progn
-    (require 'helm-config)
-    (setq helm-candidate-number-limit 100)
-    ;; From https://gist.github.com/antifuchs/9238468
-    (setq helm-idle-delay 0.0 ; update fast sources immediately (doesn't).
-          helm-input-idle-delay 0.01  ; this actually updates things
-                                        ; reeeelatively quickly.
-          helm-yas-display-key-on-candidate t
-          helm-quick-update t
-          helm-M-x-requires-pattern nil
-          helm-ff-skip-boring-files t)
-    (helm-mode))
-  :bind (("C-c h" . helm-mini)
-         ("C-h a" . helm-apropos)
-         ("C-x C-b" . helm-buffers-list)
-         ("C-x b" . helm-buffers-list)
-         ("M-y" . helm-show-kill-ring)
-         ("M-x" . helm-M-x)
-         ("C-x c o" . helm-occur)
-         ("C-x c s" . helm-swoop)
-         ("C-x c y" . helm-yas-complete)
-         ("C-x c Y" . helm-yas-create-snippet-on-region)
-         ("C-x c b" . my/helm-do-grep-book-notes)
-         ("C-x c SPC" . helm-all-mark-rings)))
-(ido-mode -1) ;; Turn off ido mode in case I enabled it accidentally
-
- ;; ---------------------------helm-bibtex--------------------------------------
-;; The requires are not needed now I'm installing helm-bibtex from Melpa.
-;; Next two are required in helm-bibtex.
-;; (require 'f)
-;; (require 'parsebib)
-;; Next line needed only so 'bibtex-completion-open-pdf is known for C-c p.
-(require 'helm-bibtex)
-;; (setq helm-bibtex-bibliography
-(setq bibtex-completion-bibliography
-      '("~/texmf/bibtex/bib/la.bib"
-        "~/texmf/bibtex/bib/misc.bib"
-        "~/texmf/bibtex/bib/njhigham.bib"
-        "~/texmf/bibtex/bib/njhigham_extra.bib"
-        ))
-
-(setq bibtex-completion-library-path '("~/pdf_papers/" "~/pdf_papers/higham/"
-                                       "~/pdf_books/"))
-;; ;; This obsolete, but try anyway.
-;; (setq helm-bibtex-library-path '("~/pdf_papers" "~/pdf_papers/higham"
-;;                                 "~/pdf_books"))
-
-;; Shouldn't be necessary, but PDF files not being found on Windows.
-;; (setq helm-bibtex-library-path nil)
-;; (setq helm-bibtex-pdf-field nil)
-;; (setq bibtex-completion-pdf-field nil)
-
-(setq helm-bibtex-pdf-symbol "#")
-
-(if (system-is-mac)
-  (setq helm-bibtex-pdf-open-function
-    (lambda (fpath)
-    (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath))))
-;;  'helm-open-file-with-default-tool))
-
-;; Now gives "symbol's function definition is void."
-;; Commented out for now (docvew will be used?).
-;; (if (system-is-mac)
-;; ;; (setq bibtex-completion-pdf-open-function
-;; (setq bibtex-completion-open-pdf
-;;   (lambda (fpath)
-;;     (call-process "open" nil 0 nil "-a" "/Applications/Skim.app" fpath)))
-;; )
-
-;; Got this working by trial and error, helped by
-;; http#://stackoverflow.com/questions/2284319/opening-files-with-default-windows-application-from-within-emacs
-;; (if (system-is-windows)
-;;  (setq helm-bibtex-pdf-open-function    ;; Open PDF in Sumatra
-;;     (lambda (fpath) (shell-command
-;;              (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
-
-(if (system-is-windows)
-(setq bibtex-completion-pdf-open-function       ;; Open PDF in Sumatra
-;; (setq bibtex-completion-open-pdf       ;; Open PDF in Sumatra
-;;  (setq helm-bibtex-open-pdf       ;; Open PDF in Sumatra
-    (lambda (fpath) (shell-command
-             (concat "start /pgm SumatraPDF.exe -reuse-instance " fpath )))))
-			 
-;; 	http://pages.sachachua.com/.emacs.d/Sacha.html#orge96c6ed   需要认真阅读，org-mode与helm的交织		 
-;;有待完善
-
-(fset 'yes-or-no-p 'y-or-n-p)        ; Change yes/no questions to y/n type.	
-;(use-package smart-mode-line
-;;    :ensure t)         ;Display a more compact mode line    ???have a problem
-;; http://pages.sachachua.com/.emacs.d/Sacha.html
-
-;------------------------undo-tree----------------------------------------
-;People often struggle with the Emacs undo model, where there's really no concept of "redo" - you simply undo the undo.
-;This lets you use C-x u (undo-tree-visualize) to visually walk through the changes you've made, 
-;undo back to a certain point (or redo), and go down different branches.
-(use-package  undo-tree 
-  :ensure  t 
-  :init 
-    (global-undo-tree-mode ))
-
-;------------------------which-key------or----- guide-key-----------------------------
-;Help It's hard to remember keyboard shortcuts. The guide-key package pops up help after a short delay.	
-(use-package which-key
-  ;; :load-path "~/dropbox/elisp/which-key"
-  :disabled  t                ;和guide-key功能相同？
-  :config
-  ;; (setq guide-key/highlight-command-regexp "rectangle")
-  (which-key-mode)
-  (which-key-setup-minibuffer)
-)
 	
-;Help It's hard to remember keyboard shortcuts. The guide-key package pops up help after a short delay.	
-(use-package guide-key
-  :defer t
-  :diminish guide-key-mode
-  :config
-  (progn
-  (setq guide-key/guide-key-sequence '("C-x r" "C-x 4" "C-c"))
-  (guide-key-mode 1)))  ; Enable guide-key-mode
-	
-;------------------UTF-8-------------------------------------------------
+;---Encoding configruation 
 ;; From http://www.wisdomandwonder.com/wordpress/wp-content/uploads/2014/03/C3F.html
 (prefer-coding-system 'utf-8)
 (when (display-graphic-p)
  (setq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)))	
 
-;---------------------------------------------------------------------------------
+
 ;;fix chinese coding  解决中文字体显示为乱码 方框数字
  ;;(set-fontset-font "fontset-default"'gb18030' ("Microsoft YaHei" . "unicode-bmp"))
  (set-default-font "-outline-微软雅黑-normal-normal-normal-sans-21-*-*-*-p-*-iso8859-1")
@@ -401,8 +1060,881 @@
 (define-key global-map (kbd "C-M--") 'text-scale-decrease)
 
 (define-key global-map (kbd "M-[") 'backward-sentence)
-(define-key global-map (kbd "M-]") 'forward-sentence)  
+(define-key global-map (kbd "M-]") 'forward-sentence) 
+
+
+
   
+  
+;;---yasnippet
+;;Snippets工具可以让我们使用定义好的代码片断，或者文本块，从而可以通过快捷键的方式快速录入。从而提高录入速度。			 
+(use-package yasnippet
+  :ensure t 
+;;:demand t  ;;覆盖包的的延迟，强制进行加载， 即使有:bind 也不会再延迟
+  :diminish yas-minor-mode
+  :bind (("C-c y d" . yas-load-directory)
+         ("C-c y i" . yas-insert-snippet)
+         ("C-c y f" . yas-visit-snippet-file)
+         ("C-c y n" . yas-new-snippet)
+         ("C-c y t" . yas-tryout-snippet)
+         ("C-c y l" . yas-describe-tables)
+         ("C-c y g" . yas/global-mode)
+         ("C-c y m" . yas/minor-mode)
+         ("C-c y a" . yas-reload-all)
+         ("C-c y x" . yas-expand))
+   :bind (:map yas-keymap
+         ("C-i" . yas-next-field-or-maybe-expand))
+   :mode ("/\\.emacs\\.d/snippets/" . snippet-mode)
+   ;;:config
+   ;;(global-yasnippet 1);;报错
+ )
+
+ 
+ (use-package auto-complete
+  :ensure t
+  :init
+  (progn
+    (ac-config-default)
+    (global-auto-complete-mode t)
+    ))
+	
+;;----- Abbreviations
+;;(setq abbrev-file-name "~/Dropbox/emacs_abbrev_defs")
+(setq save-abbrevs t)              ;; save abbrevs when files are saved
+(setq-default abbrev-mode t)
+
+	
+;;----smartparens
+ (use-package smartparens
+    :ensure t 
+    :config
+    (require 'smartparens-config)
+    (setq sp-autoescape-string-quote nil)
+    (--each '(css-mode-hook
+              restclient-mode-hook
+              js-mode-hook
+              java-mode
+              ruby-mode
+              markdown-mode
+              groovy-mode
+			  latex-mode
+			  bibtex-mode
+              latex-extra-mode 		  
+			  org-mode
+			  lisp-mode
+			  text-mode)
+      (add-hook it 'turn-on-smartparens-mode))
+
+  ) 
+ 
+;;----------------------------------------------
+;; Modified by NJH from
+;; https://plus.google.com/113859563190964307534/posts/SK1vqiG9jv5
+;; Doesn't work within expand-region, unfortunately.
+(defun select-text-in-dollars()
+(interactive)
+(let (b1 b2)
+(skip-chars-backward "^$")
+(setq b1 (point))
+(skip-chars-forward "^$")
+(setq b2 (point))
+(set-mark b1)
+))
+(add-hook 'LaTeX-mode-hook
+          '(lambda ()
+              (local-set-key (kbd "C-$") 'select-text-in-dollars)
+;;              (local-unset-key (kbd "C-c C-d")) ; Prefer date.
+;;              (define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error)
+	      ))
+;; Not sure why this doesn't work within the add-hook.
+(eval-after-load 'latex
+;;     '(define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error))
+   '(progn
+    (define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error)
+    (local-unset-key "\C-c\C-d") ; Prefer date.
+    ))
+
+(add-hook 'LaTeX-mode-hook #'latex-extra-mode) ; Activate latex-extra
+;; Disable C-c C-u from latex-extra (prefer LaTeX-star-environment below).
+;; Next line seemed to wipe out latex-extra and reftex key bindings:
+;; (add-hook 'LaTeX-mode-hook '(lambda () (define-key latex-extra-mode-map "" nil)))
+;; So replaced by this:
+(add-hook 'LaTeX-mode-hook '(lambda () (define-key latex-extra-mode-map (kbd "C-c C-u") nil)))
+
+;; (add-hook 'LaTeX-mode-hook
+;; 	  '(lambda()
+;;      	     (local-unset-key (kbd "C-c C-d")) ; Prefer date.
+;; 	     ))
+
+
+
+(use-package wrap-region
+;;  :load-path "~/Dropbox/elisp/wrap-region"
+  ;; Deferred loading caused by next line stops package working
+  ; until mode turned off then on again!
+  ; :commands wrap-region-mode
+  :diminish wrap-region-mode
+  :config
+  (wrap-region-add-wrappers
+   '(("*" "*" nil org-mode)
+     ("~" "~" nil org-mode)
+     ("/" "/" nil org-mode)
+     ("=" "=" "+" org-mode)
+     ("_" "_" nil org-mode)
+     ("$" "$" nil (org-mode latex-mode))
+     ("[" "]")
+     ("(" ")")
+     ("`" "'")
+    ))
+    (wrap-region-global-mode t)
+    (wrap-region-mode t)
+    ;; (wrap-region-add-wrapper "$" "$" nil 'latex-mode)
+    ;; (wrap-region-add-wrapper "[" "]")
+    ;; (wrap-region-add-wrapper "(" ")")
+    ;; (wrap-region-add-wrapper "`" "'")
+)
+
+(use-package expand-region
+;;  :load-path "~/Dropbox/elisp/expand-region.el-master"
+;;  :commands wrap-region-mode
+  :bind (("C-@"  . er/expand-region)
+         ("C-~" .  er/contract-region))
+  :init
+  ;; Trying :init because with :config this is done after LaTeX mode loaded.
+  (defun er/add-latex-mode-expansions ()
+  (make-variable-buffer-local 'er/try-expand-list)
+  (setq er/try-expand-list (append
+                            er/try-expand-list
+                            '(LaTeX-mark-environment
+                              ))))
+  (add-hook 'LaTeX-mode-hook 'er/add-latex-mode-expansions)
+
+  (defun er/add-text-mode-expansions ()
+    (make-variable-buffer-local 'er/try-expand-list)
+    (setq er/try-expand-list (append
+                              er/try-expand-list
+                              '(mark-paragraph
+                                mark-page))))
+
+  (add-hook 'text-mode-hook 'er/add-text-mode-expansions)
+)
+
+;; add smart swap buffers in multi-windows
+  (use-package swap-buffers
+    :ensure t 
+    :config
+    (global-set-key (kbd "C-x 5") 'swap-buffers)
+  )
+
+;;----Multiple cursor
+;;Multiple cursor是一个非常强大的多位置同时编辑的编辑模式，文档可参考：
+;;这里有一个介绍详细的视频：http://emacsrocks.com/e13.html
+(use-package multiple-cursors
+    :defer t
+    :bind
+     (("C-c m t" . mc/mark-all-like-this)
+      ("C-c m m" . mc/mark-all-like-this-dwim)
+      ("C-c m l" . mc/edit-lines)
+      ("C-c m e" . mc/edit-ends-of-lines)
+      ("C-c m a" . mc/edit-beginnings-of-lines)
+      ("C-c m n" . mc/mark-next-like-this)
+      ("C-c m p" . mc/mark-previous-like-this)
+      ("C-c m s" . mc/mark-sgml-tag-pair)
+      ("C-c m d" . mc/mark-all-like-this-in-defun)))
+  (use-package phi-search
+    :defer t)
+  (use-package phi-search-mc
+    :defer t
+    :config (phi-search-mc/setup-keys))
+  (use-package mc-extras
+    :defer t
+    :config (define-key mc/keymap (kbd "C-. =") 'mc/compare-chars))
+;; add multi cursors:
+;;(require 'multiple-cursors)
+  (global-set-key (kbd "C-S-c C-S-c") 'mc/edit-lines)
+  (global-set-key (kbd "C->") 'mc/mark-next-like-this)
+  (global-set-key (kbd "C-<") 'mc/mark-previous-like-this)
+  (global-set-key (kbd "C-c C-<") 'mc/mark-all-like-this)
+  (global-set-key (kbd "C-S-c C-e") 'mc/edit-ends-of-lines)
+  (global-set-key (kbd "C-S-c C-a") 'mc/edit-beginnings-of-lines)
+
+
+;;---- Org-mode Configuration
+;;Org-mode是Emacs中最常用的一个模式，在此模式下，可以支持文档编辑、任务管理、项目管理、GTD相关的任务管理等，
+;;另外在此模式下，可以借助一些工具在org-mdoe下进行画图，并可以将文档导出html, markdown, pdf等格式。
+;; http://irreal.org/blog/?p=2029
+;;(setq org-directory "~/Dropbox/org")
+(setq org-structure-template-alist
+      '(("s" "#+begin_src ?\n\n#+end_src" "<src lang=\"?\">\n\n</src>")
+        ("e" "#+begin_example\n?\n#+end_example" "<example>\n?\n</example>")
+        ("q" "#+begin_quote\n?\n#+end_quote" "<quote>\n?\n</quote>")
+        ("v" "#+BEGIN_VERSE\n?\n#+END_VERSE" "<verse>\n?\n</verse>")
+        ("c" "#+BEGIN_COMMENT\n?\n#+END_COMMENT" "<comment>\n?\n</comment>")
+        ("p" "#+BEGIN_PRACTICE\n?\n#+END_PRACTICE")
+        ("o" "#+begin_src emacs-lisp :tangle yes\n?\n#+end_src" "<src lang=\"emacs-lisp\">\n?\n</src>")
+        ("l" "#+begin_src emacs-lisp\n?\n#+end_src" "<src lang=\"emacs-lisp\">\n?\n</src>")
+        ("L" "#+latex: " "<literal style=\"latex\">?</literal>")
+        ("h" "#+begin_html\n?\n#+end_html" "<literal style=\"html\">\n?\n</literal>")
+        ("H" "#+html: " "<literal style=\"html\">?</literal>")
+        ("a" "#+begin_ascii\n?\n#+end_ascii")
+        ("A" "#+ascii: ")
+        ("i" "#+index: ?" "#+index: ?")
+        ("I" "#+include %file ?" "<include file=%file markup=\"?\">")))
+
+;;================================================================
+;; Config for Global function
+;;================================================================
+;;  
+;; org-mode
+(add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
+
+
+;; set export table's format
+(setq org-table-export-default-format "orgtbl-to-csv")
+
+;;================================================================
+;; Config for TODO Configuration
+;;================================================================
+;; This is originally assigned to C-j. See how it goes.
+;; I want it so that lists easier to enter.
+;; Turned off, since has unwanted effects, e.g. in todo.org.
+;; Either turn on selectively or use C-j.
+;; (define-key org-mode-map (kbd "<return>") 'org-return-indent)
+
+(setq org-capture-templates
+   '(("t" "TODO" entry (file+headline (concat org-directory "/todo.org")
+;;                                       "Captures")
+                                       "General")
+       "* TODO %?\n  %U\n  %a" :prepend t :empty-lines 0)
+    ("e" "CLAIMED" entry (file+headline (concat org-directory "/todo.org")
+                                       "Expense claims")
+       "* %?\n  %U\n  %a" :prepend t :empty-lines 0)
+    ("i" "item" entry (file+headline (concat org-directory "/todo.org")
+                                       "General")
+       "* %?\n  %U\n  %a" :prepend t :empty-lines 0)
+))
+(setq org-reverse-note-order t)  ;; Refile at top instead of bottom.
+
+
+;; (setq org-todo-keywords
+;;       (quote (;;(sequence "TODO(t)" "NEXT(n)" "MAYBE(m)" "STARTED(s)" "APPT(a)" "|" "DONE(d)")
+;;               (sequence "TODO(t)" "NEXT(n)" "STARTED(s)" "|" "DONE(d)")
+;;               (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)" "PHONE" "MEETING"))))
+
+(setq org-todo-keywords
+      (quote ((sequence "TODO(t)" "NEXT(n)" "STARTED(s)" "MAYBE(m)" "|" "DONE(d!/!)")
+              (sequence "PROJECT(p)" "|" "DONE(d!/!)" "CANCELLED(c@/!)")
+              (sequence "WAITING(w@/!)" "HOLD(h)" "|" "CANCELLED(c@/!)"))))
+
+(setq org-todo-keyword-faces
+      (quote (;;("NEXT" :inherit warning)
+              ("PROJECT" :inherit font-lock-string-face)
+              ("TODO" :foreground "red" :weight bold)
+              ("NEXT" :foreground "blue" :weight bold)
+              ("STARTED" :foreground "green" :weight bold)
+              ("DONE" :foreground "forest green" :weight bold)
+              ("WAITING" :foreground "orange" :weight bold)
+              ("MAYBE" :foreground "grey" :weight bold)
+              ("HOLD" :foreground "magenta" :weight bold)
+              ("CANCELLED" :foreground "forest green" :weight bold)
+              )))
+
+
+(setq org-use-fast-todo-selection t)
+(setq org-todo-state-tags-triggers
+      (quote (("CANCELLED" ("CANCELLED" . t))
+              ("WAITING" ("WAITING" . t))
+              ("MAYBE" ("WAITING" . t))
+              ("HOLD" ("WAITING") ("HOLD" . t))
+              (done ("WAITING") ("HOLD"))
+              ("TODO" ("WAITING") ("CANCELLED") ("HOLD"))
+              ("NEXT" ("WAITING") ("CANCELLED") ("HOLD"))
+              ("DONE" ("WAITING") ("CANCELLED") ("HOLD")))))
+
+
+;; Now in Org 7.8.11 as org-table-transpose-table-at-point
+;; http://orgmode.org/worg/org-hacks.html
+;; (defun org-transpose-table-at-point ()
+;;   "Transpose orgmode table at point, eliminate hlines"
+;;   (interactive)
+;;   (let ((contents
+;;          (apply #'mapcar* #'list
+;;                 ;; remove 'hline from list
+;;                 (remove-if-not 'listp
+;;                                ;; signals error if not table
+;;                                (org-table-to-lisp)))))
+;;     (delete-region (org-table-begin) (org-table-end))
+;;     (insert (mapconcat (lambda(x) (concat "| " (mapconcat 'identity x " | " ) "  |\n" ))
+;;                        contents ""))
+;;     (org-table-align)))
+
+;; http://www.patokeefe.com/blog
+;; Modified by NJH.
+(defun orgtbl-to-latex-matrix (table params)
+  "Convert the Orgtbl mode TABLE to a LaTeX Matrix."
+  (interactive)
+  (let* ((params2
+          (list
+           :tstart (concat "\\[\n\\bmatrix{")
+           :tend "}\n\\]"
+           :lstart "" :lend " \\cr" :sep " & "
+           :efmt "%s%s" :hline "\\hline")))
+    (orgtbl-to-generic table (org-combine-plists params2 params))))
+
+(defun orgtbl-insert-matrix ()
+  "Insert a radio table template appropriate for this major mode."
+  (interactive)
+  (let* ((txt orgtbl-latex-matrix-string)
+         name pos)
+    (setq name (read-string "Table name: "))
+    (while (string-match "%n" txt)
+      (setq txt (replace-match name t t txt)))
+    (or (bolp) (insert "\n"))
+    (setq pos (point))
+    (insert txt)
+    (previous-line)
+    (previous-line)))
+
+(defcustom orgtbl-latex-matrix-string  "% BEGIN RECEIVE ORGTBL %n
+% END RECEIVE ORGTBL %n
+\\begin{comment}
+#+ORGTBL: SEND %n orgtbl-to-latex-matrix :splice nil :skip 0
+
+\\end{comment}\n"
+  "Template for the latex matrix orgtbl translator
+All occurrences of %n in a template will be replaced with the name of the
+table, obtained by prompting the user."
+  :type 'string
+  :group 'org-table)
+
+(if (system-is-windows)
+;; Open PDFs visited in Org-mode in Sumatra (not the default choice, Acrobat).
+;; http://stackoverflow.com/a/8836108/789593
+(add-hook 'org-mode-hook
+   '(lambda ()
+      (delete '("\\.pdf\\'" . default) org-file-apps)
+;;      (add-to-list 'org-file-apps '("\\.pdf\\'" . "d:\\bat\\sumatra_emacs.bat %s")))
+;;      (add-to-list 'org-file-apps '("\\.pdf\\'" . "\"C:/Program Files (x86)/SumatraPDF/SumatraPDF.exe\" -reuse-instance %s")))
+      (add-to-list 'org-file-apps '("\\.pdf\\'" . "\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance %s")))
+))
+
+;; Open PDFs in Skim instead of Acrobat.
+(if (system-is-mac)
+(add-hook 'org-mode-hook
+   '(lambda ()
+      (delete '("\\.pdf\\'" . default) org-file-apps)
+      (add-to-list 'org-file-apps '("\\.pdf\\'" . "skim %s")
+))))
+
+;; Mobile org
+;; Set to the name of the file where new notes will be stored
+;;(setq org-mobile-inbox-for-pull "~/dropbox/org/todo.org")
+;; Set to <your Dropbox root directory>/MobileOrg.
+;;(setq org-mobile-directory "~/Dropbox/Apps/MobileOrg")
+
+;; Activate additional Babel languages
+(org-babel-do-load-languages
+ 'org-babel-load-languages
+ '((calc . t)
+   ))
+
+;; Useful functions for generating html from org, e.g. to paste into
+;; Wordpress.
+
+;; http://sachachua.com/blog/2014/10/publishing-wordpress-thumbnail-images-using-emacs-org2blog/
+;; http://pages.sachachua.com/.emacs.d/Sacha.html#sec-1-8-18-5
+(defun sacha/org-copy-region-as-html (beg end &optional level)
+  "Make it easier to copy code for Wordpress posts and other things."
+  (interactive "r\np")
+  (let ((org-export-html-preamble nil)
+        (org-html-toplevel-hlevel (or level 3)))
+    (kill-new
+     (org-export-string-as (buffer-substring beg end) 'html t))))
+
+(defun sacha/org-copy-subtree-as-html ()
+  (interactive)
+  (sacha/org-copy-region-as-html
+   (org-back-to-heading)
+   (org-end-of-subtree)))
+
+;; For Org to convert to doc.
+;; http://blog.binchen.org/posts/how-to-take-screen-shot-for-business-people-efficiently-in-emacs.html
+(setq org-odt-preferred-output-format "doc")
+
+;; This stops hitting return after a URL opening browser.
+(setq org-return-follows-link nil)
+
+;;(load-file "~/Dropbox/.emacs-mail-setup")
+
+;; http://www.howardism.org/Technical/Emacs/orgmode-wordprocessor.html
+(setq org-hide-emphasis-markers t)
+(add-to-list 'org-emphasis-alist
+             '("*" (:foreground "pink")
+               ))
+
+;; http://pragmaticemacs.com/emacs/prevent-comments-from-breaking-paragraphs-in-org-mode-latex-export/
+;; Remove comments from org document for use with export hook
+;; https://emacs.stackexchange.com/questions/22574/orgmode-export-how-to-prevent-a-new-line-for-comment-lines
+(defun delete-org-comments (backend)
+  (loop for comment in (reverse (org-element-map (org-element-parse-buffer)
+                    'comment 'identity))
+    do
+    (setf (buffer-substring (org-element-property :begin comment)
+                (org-element-property :end comment))
+          "")))
+;; Add to export hook.
+(add-hook 'org-export-before-processing-hook 'delete-org-comments)
+
+;; Execute this from scratch buffer to remove the hook:
+;; (remove-hook 'org-export-before-processing-hook 'delete-org-comments)
+
+;; http://pragmaticemacs.com/emacs/highlight-latex-text-in-org-mode/
+(setq org-highlight-latex-and-related '(latex))
+
+;; For converting org tables to csv in place.
+;; Useful if have several table separated by text.
+;; https://stackoverflow.com/questions/17717483/howto-convert-org-mode-table-to-original-tabbed-format
+(defun org-table-transform-in-place ()
+  "Just like `ORG-TABLE-EXPORT', but instead of exporting to a
+  file, replace table with data formatted according to user's
+  choice, where the format choices are the same as
+  org-table-export."
+  (interactive)
+  (unless (org-at-table-p) (user-error "No table at point"))
+  (org-table-align)
+  (let* ((format
+      (completing-read "Transform table function: "
+               '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+                 "orgtbl-to-html" "orgtbl-to-generic"
+                 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+                 "orgtbl-to-unicode")))
+     (curr-point (point)))
+    (if (string-match "\\([^ \t\r\n]+\\)\\( +.*\\)?" format)
+    (let ((transform (intern (match-string 1 format)))
+          (params (and (match-end 2)
+               (read (concat "(" (match-string 2 format) ")"))))
+          (table (org-table-to-lisp
+              (buffer-substring-no-properties
+               (org-table-begin) (org-table-end)))))
+      (unless (fboundp transform)
+        (user-error "No such transformation function %s" transform))
+      (save-restriction
+        (with-output-to-string
+          (delete-region (org-table-begin) (org-table-end))
+          (insert (funcall transform table params) "\n")))
+      (goto-char curr-point)
+      (beginning-of-line)
+      (message "Tranformation done."))
+      (user-error "Table export format invalid"))))
+
+;;================================================================
+;; Config for Tags
+;;================================================================
+;; Config TODO tags
+(setq org-tag-alist '((:startgroup)
+                      ("Develop" . ?1)
+                      (:grouptags )
+                      ("Simon Tschen" . ?z)
+                      (:endgroup)
+
+                      ))
+;; Allow setting single tags without the menu
+(setq org-fast-tag-selection-single-key (quote expert))
+
+;; For tag searches ignore tasks with scheduled and deadline dates
+(setq org-agenda-tags-todo-honor-ignore-options t)
+
+;;================================================================
+;; Config for Global column view and properties
+;;================================================================
+;; Set default column view headings: Task Effort Clock_Summary
+;;(setq org-columns-default-format "%25ITEM %10Effort(Effort){:} %SCHEDULED %DEADLINE %11Status %20TAGS %PRIORITY %TODO")
+;;(setq org-columns-default-format "%25ITEM  %9Approved(Approved?){X} %SCHEDULED %DEADLINE %11Status %TAGS %PRIORITY %TODO")
+(setq org-columns-default-format
+      ;;" %TODO %30ITEM %15DEADLINE %15SCHEDULED %3PRIORITY %10TAGS %5Effort(Effort){:} %6CLOCKSUM"
+      " %TODO %30ITEM %15DEADLINE %15SCHEDULED %3PRIORITY %10TAGS %5Effort(Effort){:}"
+      )
+
+;; global Effort estimate values
+;; global STYLE property values for completion
+(setq org-global-properties (quote (
+                                    ;;("Effort_ALL" . "0:15 0:30 0:45 1:00 2:00 3:00 4:00 5:00 6:00 0:00")
+                                    ("Status_ALL" . "Not-start In-Progress Delay Finished Cancled")
+                                    ("ID_ALL" . "")
+                                    ("STYLE_ALL" . "habit"))))
+;; update dynamic blocks when save file
+(add-hook 'before-save-hook 'org-update-all-dblocks)
+
+;;================================================================
+;; Config for File Export To PDF                       ;;    drill
+;;================================================================ 
+;;https://github.com/lujianmei/emacs-in-orgfile/blob/master/03-editing/init-gtd-management.org
+
+
+
+;;================================================================
+;; Config for File Export To PDF but use beamer  导出Beamer的设置
+;;================================================================ 
+;; 自己设置，暂未学会
+;; https://github.com/lujianmei/emacs-in-orgfile/blob/master/03-editing/init-gtd-management.org
+
+
+ (use-package ox 
+    :load-path "~/.emacs.d/lisp/ox.el"
+    ;;:ensure nil 
+  )
+  
+;; https://github.com/emacsmirror/org/tree/master/lisp
+
+ (use-package ox-beamer
+  :load-path "~/.emacs.d/lisp/ox-beamer.el"
+  ;;:ensure nil
+  )
+
+ (use-package ox-html 
+  :load-path "~/.emacs.d/lisp/ox-html.el"
+    ;;:ensure nil
+   )  
+
+ (use-package org-id
+   :load-path "~/.emacs.d/lisp/org-id.el"
+   ;;:ensure nil
+  )
+  
+
+;; 使用Listings宏包格式化源代码(只是把代码框用listing环境框起来，还需要额外的设置)
+  (require 'ox-latex)
+  (setq org-export-latex-listings t)
+  (add-to-list 'org-latex-packages-alist '("" "listings"))  ;; 如果不希望每次都载入这些Latex包，省略这两行，
+  (add-to-list 'org-latex-packages-alist '("" "xcolor"))    ;; 可以只在org文件里用LATEX_HEADER调用
+;;-------------------------------------------------
+
+  
+  
+;;中文目录下的 org 文件无法转换为 pdf 文件
+;;这个问题可以使用 latexmk 命令配合 "%b.tex" (仅仅使用文件名，而不是文件的绝对路径) 来规避，比如：
+
+(setq oxlc/org-latex-commands '("latexmk -xelatex -gg -pdf %b.tex"))
+
+  
+  
+
+
+    
+
+;;---Chinese-font-setup
+;;https://github.com/tumashu/cnfonts
+;;在Org-mode中，编辑表格并让表格的分隔线对齐是一件不太容易的事情，
+;;主要原因是因为Org-mode中编辑时字母与汉字同时存在时，
+;;则字母字体长度与汉字字体宽度不同的原因导致，
+;;因此这里的主要解决方案是找到一种通用等宽字体，通过字体的配置来达到最终表格对齐正常。
+;;感谢cnfonts的包开发者   
+;;  
+(use-package cnfonts
+    :ensure t 
+    :config
+    (setq cfs-profiles
+          '("program" "org-mode" "read-book"))
+  )
+
+;; -----------------------------------------
+;;key bindings for org mode
+;; -----------------------------------------
+
+(global-unset-key (kbd "C-'")) ;; this setting has no use, and conflict with smart
+
+
+;;(global-set-key (kbd "<f12>") 'org-agenda) ;; configured blew
+(global-set-key (kbd "<f9> c") 'calendar)
+(global-set-key (kbd "<f9> v") 'visible-mode)
+(global-set-key (kbd "C-c c") 'org-capture)
+
+;; add ~/notes/front-end-dev-plan.org into agenda
+;; (setq org-agenda-files (list "~/notes/front-end-dev-plan.org"))
+(global-set-key "\C-c a" 'org-agenda)
+;; I use C-c c to start capture mode
+(global-set-key (kbd "C-c c") 'org-capture)
+
+
+;; config for export-mutilpul files
+(global-set-key (kbd "C-<f12>") 'bh/save-then-publish)
+
+;; config for clocking
+(global-set-key (kbd "<f9> I") 'bh/punch-in)
+(global-set-key (kbd "<f9> O") 'bh/punch-out)
+
+(global-set-key (kbd "<f9> l") 'org-toggle-link-display)
+(global-set-key (kbd "<f9> SPC") 'bh/clock-in-last-task)
+
+(global-set-key (kbd "<f11>") 'org-clock-goto)
+(global-set-key (kbd "C-<f11>") 'org-clock-in)  
+  
+;;-----Org agenda view customization configuration
+;;新增新的命令
+  ;;定义新的命令，来存储一些常用的搜索条件，定义需要显示的数据；
+  ;;此种方法可以按下面的代码形式，对Agenda Dispather进行定制：
+(setq org-agenda-custom-commands
+           '(("x" agenda)
+             ("y" agenda*)
+             ("w" todo "WAITING")
+             ("W" todo-tree "WAITING")
+             ("u" tags "+boss-urgent")
+             ("v" tags-todo "+boss-urgent")
+             ("U" tags-tree "+boss-urgent")
+             ("f" occur-tree "\\<FIXME\\>")
+             ("h" . "HOME+Name tags searches") ; description for "h" prefix
+             ("hl" tags "+home+Lisa")
+             ("hp" tags "+home+Peter")
+             ("hk" tags "+home+Kim")))  
+ 
+
+;;;AUCTeX stuff.
+
+;;https://github.com/jwiegley/dot-emacs/blob/80f70631c03b2dd4f49741478453eaf1a2fe469b/init.el
+(use-package auctex
+  :mode ("\\.tex\\'" . TeX-latex-mode)
+  :config
+  (defun latex-help-get-cmd-alist ()    ;corrected version:
+    "Scoop up the commands in the index of the latex info manual.
+   The values are saved in `latex-help-cmd-alist' for speed."
+    ;; mm, does it contain any cached entries
+    (if (not (assoc "\\begin" latex-help-cmd-alist))
+        (save-window-excursion
+          (setq latex-help-cmd-alist nil)
+          (Info-goto-node (concat latex-help-file "Command Index"))
+          (goto-char (point-max))
+          (while (re-search-backward "^\\* \\(.+\\): *\\(.+\\)\\." nil t)
+            (let ((key (buffer-substring (match-beginning 1) (match-end 1)))
+                  (value (buffer-substring (match-beginning 2)
+                                           (match-end 2))))
+              (add-to-list 'latex-help-cmd-alist (cons key value))))))
+    latex-help-cmd-alist)
+
+  (add-hook 'TeX-after-compilation-finished-functions
+            #'TeX-revert-document-buffer))
+;;http://www.xemacs.org/Documentation/html/auctex_9.html
+;; Query for master file. 在文档中键入编译命令时，emacs会首先判断当前正在编辑的文档是否为主文档。
+;;如果不是，则询问主文档的位置。指定后，emacs自动将该位置添加到文档末尾，以备后续调用
+;;(setq-default TeX-master nil) ;;	    ???		
+;;(setq-default TeX-master "master") ; All master files called "master".
+
+			
+(use-package cdlatex
+  ;;:defer t
+  :load-path "~/.emacs.d/lisp/cdlatex.el"
+  :config
+  (add-hook 'LaTex-mode-hook 'turn-on-org-cdlatex) ;; with AUCTex LaTex mode-line
+  (add-hook 'LaTex-mode-hook 'turn-on-org-cdlatex) ;; with Emacs latex mode
+  (add-hook 'LaTeX-mode-hook 'turn-on-cdlatex)   ; with AUCTeX LaTeX mode
+  (add-hook 'latex-mode-hook 'turn-on-cdlatex)   ; with Emacs latex mode
+)
+ 
+;; latex-preview-pane is a minor mode for Emacs that enables you 
+;;to preview your LaTeX files directly in Emacs.
+;;
+;; 正向与逆向搜索(只对英文目录下的tex文件，才有效)
+(setq TeX-PDF-mode t)
+(setq TeX-source-correlate-mode t)
+(setq TeX-source-correlate-method 'synctex)
+(setq TeX-view-program-list
+   '(("Sumatra PDF" ("\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance"
+                      (mode-io-correlate " -forward-search %b %n ") " %o"))))
+(eval-after-load 'tex
+  '(progn
+     (assq-delete-all 'output-pdf TeX-view-program-selection)
+     (add-to-list 'TeX-view-program-selection '(output-pdf "Sumatra PDF"))))
+ 
+;; magical syntax highlighting for LaTeX-mode buffers
+;;(require-package 'magic-latex-buffer)
+(use-package magic-latex-buffer
+  :defer t
+  :config
+  (add-hook 'latex-mode-hook 'magic-latex-buffer))
+;;(add-hook 'latex-mode-hook 'magic-latex-buffer)
+ 
+;;  Adds several useful functionalities to LaTeX-mode. http://github.com/Bruce-Connor/latex-extra
+(use-package latex-extra
+  :defer t
+  :config
+  (add-hook 'latex-mode-hook 'latex-extra-mode))
+;;(add-hook 'LaTeX-mode-hook #'latex-extra-mode)
+ 
+;;; * LaTeX
+(add-hook 'LaTeX-mode-hook
+          (lambda ()
+            (add-to-list 'TeX-command-list '("XeLaTeX" "%`xelatex%(mode)%' %t" TeX-run-TeX nil t))
+            (setq TeX-command-default "XeLaTeX")
+            (setq TeX-save-query  nil )
+            (setq TeX-show-compilation t)))
+
+  
+;; BibTeX mode.
+(require 'bibtex)
+(setq bibtex-string-files '("strings.bib"))
+;; Does removing trailing / on next line cure
+;; bibtex-parse-buffers-stealthily errors?
+(setq bibtex-string-file-path '("~/texmf/bibtex/bib"))
+(setq bibtex-field-delimiters 'double-quotes)
+;; Can't match my key exactly - compromise on fixed # chars from each name.
+; (setq bibtex-autokey-names-stretch 3);  Use up to 4 names in total
+; (setq bibtex-autokey-name-length 4);    Max no chars to use.
+(setq bibtex-autokey-names-stretch 0);  Use up to 4 names in total
+(setq bibtex-autokey-name-length nil);    Max no chars to use.
+(setq bibtex-autokey-titlewords 0);     Don't use title in key.
+(setq bibtex-autokey-titlewords-stretch 0);
+(setq bibtex-text-indentation 0) ; No indentation for content.
+
+;; From comment at https://nickhigham.wordpress.com/2016/01/06/managing-bibtex-files-with-emacs/
+(defun bibtex-generate-autokey ()
+  (let* ((bibtex-autokey-names nil)
+  (bibtex-autokey-year-length 2)
+  (bibtex-autokey-name-separator "\0")
+  (names (split-string (bibtex-autokey-get-names) "\0"))
+  (year (bibtex-autokey-get-year))
+  (name-char (cond ((= (length names) 1) 4) ((= (length names) 2) 2) (t 1)))
+  (existing-keys (bibtex-parse-keys)) key)
+  (setq names (mapconcat (lambda (x)
+  (substring x 0 name-char))
+  names ""))
+  (setq key (format "%s%s" names year))
+  (let ((ret key))
+  (loop for c from ?a to ?z
+  while (assoc ret existing-keys)
+  do (setq ret (format "%s%c" key c)))
+  ret)))
+
+;; This is for inserting text of citation within a tex file.
+;; Use in TeX mode and others (with different keys).
+(defun my-cite()
+   (interactive)
+   (let ((reftex-cite-format "%a, %t, %j %v, %p, %e: %b, %u, %s, %y %<"))
+                           (reftex-citation)))
+;; Above reftex-cite-format string has same effect as "'locally" but
+;; with title added and author list not abbreviated.
+
+(defun my-cite-hook ()
+(local-set-key (kbd "C-c m") 'my-cite))
+
+(global-set-key (kbd "C-c [") 'reftex-citation) ;; For all modes.
+
+;; Customize BibTeX bibtex-clean-entry.
+;; That command doesn't work properly on the Mac - unclear why.
+;; E.g. https://github.com/pcdavid/config/blob/master/emacs/feature-latex.el
+;; (setq bibtex-entry-format
+;;       `(("opts-or-alts", "page-dashes", "required-fields",
+;;          "numerical-fields", "whitespace", "last-comma", "delimiter",
+;;          "unify-case", "sort-fields"
+;; )))
+(setq bibtex-entry-format
+      `(page-dashes required-fields
+         numerical-fields whitespace last-comma delimiters
+         unify-case sort-fields))
+
+(setq bibtex-field-delimiters 'double-quotes)
+(setq bibtex-entry-delimiters 'braces)
+
+;; I prefer closing brace on its own line after cleaning BibTeX entry.
+(setq bibtex-clean-entry-hook 'mybibtex-clean-extra)
+(defun mybibtex-clean-extra ()
+  "Move final right brace to a line of its own."
+  (progn (bibtex-end-of-entry) (left-char) (newline-and-indent)
+         (insert "      ")))
+
+;; These seem to work in LaTeX mode too, so no need to distinguish?
+(defun my-tex-mode-hook ()
+;; f5 saves file then runs LaTeX with no need to hit return.
+;; http://stackoverflow.com/questions/1213260/one-key-emacs-latex-compilation
+(local-set-key (kbd "<f5>") (kbd "C-x C-s C-c C-c C-j"))
+
+(if (system-is-mac)
+     ; Next line not really needed, since same as f5, but use it for
+     ; consistency between Mac and Windows.
+;     (local-set-key (kbd "<C-f5>") (kbd "C-x C-s C-c C-c C-j")))
+     (local-set-key (kbd "<C-f5>") (kbd "C-c C-v")))
+(if (system-is-windows)
+    (local-set-key (kbd "<C-f5>")  'sumatra-jump-to-line))
+
+(defun my-ref()
+  (interactive)
+  (insert "\\ref{}")
+  (backward-char))
+(local-set-key (kbd "C-c r") 'my-ref)
+(defun my-eqref()
+  (interactive)
+  (insert "\\eqref{}")
+  (backward-char))
+(local-set-key (kbd "C-c e") 'my-eqref)
+(local-set-key (kbd "C-c C-t C-c") `TeX-clean); Remove .log, .aux files etc.
+(setq TeX-clean-confirm nil);                   Don't ask for confirmation.
+(local-set-key (kbd "C-c m") 'my-cite)
+)
+(add-hook 'TeX-mode-hook 'my-tex-mode-hook)
+
+;; Add return after C-c C-j.
+(add-hook 'LaTeX-mode-hook
+	  (lambda ()
+	    (local-set-key "\C-c\C-j"
+          	   (lambda () (interactive)
+	           (LaTeX-insert-item) (TeX-newline)
+))))
+
+;; Command to run BibTeX directly.
+;; http://comments.gmane.org/gmane.emacs.auc-tex/925
+(add-hook 'LaTeX-mode-hook
+	  (lambda ()
+	    (local-set-key (kbd "C-c C-g")
+                (lambda () (interactive) (TeX-command-menu "BibTeX")))))
+
+;; Command to run LaTeX directly and force it always to run.
+(add-hook 'LaTeX-mode-hook
+	  (lambda ()
+	    (local-set-key (kbd "<S-f5>")
+                (lambda () (interactive) (TeX-command-menu "LaTeX")))
+; 	    (local-set-key (kbd "C-c C-a")
+;                (lambda () (interactive) (TeX-command-menu "LaTeX")))
+            (local-set-key (kbd "C-M-[") 'LaTeX-find-matching-begin)
+            (local-set-key (kbd "C-M-]") 'LaTeX-find-matching-end)
+            ))
+
+;; Check next function: is the backward sentence needed?
+;; It sometimes reformats the previous line!
+;; http://stackoverflow.com/questions/539984/how-do-i-get-emacs-to-fill-sentences-but-not-paragraphs
+(defun fill-sentence ()
+  (interactive)
+  (save-excursion
+    (or (eq (point) (point-max)) (forward-char))
+    (forward-sentence -1)
+;    (indent-relative t)
+    (let ((beg (point))
+          (ix (string-match "LaTeX" mode-name)))
+      (forward-sentence)
+      (if (and ix (equal "LaTeX" (substring mode-name ix)))
+          (LaTeX-fill-region-as-paragraph beg (point))
+        (fill-region-as-paragraph beg (point))))))
+(global-set-key (kbd "<f7>") 'fill-sentence)
+
+;; From comment at https://nickhigham.wordpress.com/2016/01/06/managing-bibtex-files-with-emacs/
+(defvar bp/bibtex-fields-ignore-list
+  '("keywords" "abstract" "file" "issn" "eprint" "issue_date"
+    "articleno" "numpages" "acmid"))
+(defun bp/bibtex-clean-entry-hook ()
+  (save-excursion
+  (let (bounds)
+  (when (looking-at bibtex-entry-maybe-empty-head)
+  (goto-char (match-end 0))
+  (while (setq bounds (bibtex-parse-field))
+  (goto-char (bibtex-start-of-field bounds))
+  (if (member (bibtex-name-in-field bounds)
+  bp/bibtex-fields-ignore-list)
+  (kill-region (caar bounds) (nth 3 bounds))
+  (goto-char (bibtex-end-of-field bounds))))))))
+(add-hook 'bibtex-clean-entry-hook 'bp/bibtex-clean-entry-hook)
+(global-set-key (kbd "<f7>") 'fill-sentence)
+
+(use-package reftex
+  :after auctex
+  :hook (LaTeX-mode . reftex-mode))
+
 ;;; * Other misc setup stuff
 
 ;; Trying omitting this for Mac to see if clipboard problem solved.
@@ -410,9 +1942,6 @@
 (if (system-is-windows)
 (setq save-interprogram-paste-before-kill 1) ; Save clipbrd string before kill.
 )
-
-
-
 ;; ---------------------------------------------------------------
 ;; Force calls to use previous instance of Emacs.
 ;;(require 'server)
@@ -430,24 +1959,6 @@
 (setq calendar-longitude -2.340598)
 (setq calendar-location-name "Eccles, UK")
 
-;----------------------------------------------------------------------
-;;Emacs Port of anzu.vim
-;;(use-package anzu    ;;I don't need it for now. Another reason is that I want to use emacs purely for now. 
-;;  ;; :load-path "~/Dropbox/elisp/anzu"
-;;  :config
-;;  (global-anzu-mode 1)
-;;  (set-face-attribute 'anzu-mode-line nil
-;;                      :foreground "yellow" :weight 'bold)
-;;  (custom-set-variables
-;;   '(anzu-mode-lighter "")
-;;   '(anzu-deactivate-region t)
-;;   '(anzu-search-threshold 1000)
-;;   '(anzu-replace-threshold 50)
-;;   '(anzu-replace-to-string-separator " => "))
-;;  (define-key isearch-mode-map [remap isearch-query-replace]  #'anzu-isearch-query-replace)
-;;  (define-key isearch-mode-map [remap isearch-query-replace-regexp] #'anzu-isearch-query-replace-regexp)
-;;)
-; ----------------------------------------------------------------------
 ;; For latest ORG mode downloaded by me.
 ;;(add-to-list 'load-path "~/Dropbox/elisp/org/lisp")
 ;; Next line seems needed to make org functions available outside org,
@@ -472,16 +1983,6 @@
 
 ;; ------------------------------------------------
 
-(use-package smex     ;;smex feels like part of ido or ivy ????
-  ;; :load-path "~/dropbox/elisp/smex-master"
-  :init (smex-initialize)
-  :bind (("M-x" . smex)
-         ("M-X" . smex-major-mode-commands)
-         ;; Next is the old M-x.
-         ("C-c C-c M-x" . execute-extended-command))
-  :config
-  ;;(setq smex-save-file "~/dropbox/.smex-items")
-)
 
 (use-package shrink-whitespace
   ;; :load-path "~/dropbox/elisp/shrink-whitespace"
@@ -497,8 +1998,6 @@
 ;; http://pragmaticemacs.com/emacs/instant-scratch-buffer-for-current-mode/
 ;;(require 'scratch)
 
-
-
 ;;(use-package git-timemachine) ;; :load-path  "~/Dropbox/elisp/git-timemachine")
 
 ;;(use-package fill-column-indicator)
@@ -513,162 +2012,9 @@
   (pcre-mode)
 )
 
-;;writeable global search a regular expression 可写的全局正则表达搜索，文本搜索
-(use-package wgrep
-  ;;:ensure t  
-  :defer t  ;;delay 
-
-    )
-
-(use-package wgrep-ag
-    :defer t
-;;  :ensure t 
-)
-
 (setq counsel-fzf-cmd "/home/zamansky/.fzf/bin/fzf -f %s")
 
-(use-package dired
-  :bind ("C-c j" . dired-two-pane)
-  :diminish dired-omit-mode
-  :hook (dired-mode . dired-hide-details-mode)
-  :preface
-  (defun dired-two-pane ()
-    (interactive)
-    (push-window-configuration)
-    (let ((here default-directory))
-      (delete-other-windows)
-      (dired "~/dl")
-      (split-window-horizontally)
-      (dired here)))
-
-  (defun dired-next-window ()
-    (interactive)
-    (let ((next (car (cl-remove-if-not #'(lambda (wind)
-                                           (with-current-buffer (window-buffer wind)
-                                             (eq major-mode 'dired-mode)))
-                                       (cdr (window-list))))))
-      (when next
-        (select-window next))))
-
-  (defvar mark-files-cache (make-hash-table :test #'equal))
-
-  (defun mark-similar-versions (name)
-    (let ((pat name))
-      (if (string-match "^\\(.+?\\)-[0-9._-]+$" pat)
-          (setq pat (match-string 1 pat)))
-      (or (gethash pat mark-files-cache)
-          (ignore (puthash pat t mark-files-cache)))))
-
-  (defun dired-mark-similar-version ()
-    (interactive)
-    (setq mark-files-cache (make-hash-table :test #'equal))
-    (dired-mark-sexp '(mark-similar-versions name)))
-
-  (defun ora-dired-rsync (dest)
-    (interactive
-     (list
-      (expand-file-name
-       (read-file-name "Rsync to: " (dired-dwim-target-directory)))))
-    (let ((files (dired-get-marked-files
-                  nil current-prefix-arg))
-          (tmtxt/rsync-command "rsync -aP "))
-      (dolist (file files)
-        (setq tmtxt/rsync-command
-              (concat tmtxt/rsync-command
-                      (shell-quote-argument file)
-                      " ")))
-      (setq tmtxt/rsync-command
-            (concat tmtxt/rsync-command
-                    (shell-quote-argument dest)))
-      (async-shell-command tmtxt/rsync-command "*rsync*")
-      (other-window 1)))
-
-  (defun ora-ediff-files ()
-    (interactive)
-    (let ((files (dired-get-marked-files))
-          (wnd (current-window-configuration)))
-      (if (<= (length files) 2)
-          (let ((file1 (car files))
-                (file2 (if (cdr files)
-                           (cadr files)
-                         (read-file-name
-                          "file: "
-                          (dired-dwim-target-directory)))))
-            (if (file-newer-than-file-p file1 file2)
-                (ediff-files file2 file1)
-              (ediff-files file1 file2))
-            (add-hook 'ediff-after-quit-hook-internal
-                      `(lambda ()
-                         (setq ediff-after-quit-hook-internal nil)
-                         (set-window-configuration ,wnd))))
-        (error "no more than 2 files should be marked"))))
-
-  :config
-  (defvar dired-omit-regexp-orig (symbol-function 'dired-omit-regexp))
-
-  ;; Omit files that Git would ignore
-  (defun dired-omit-regexp ()
-    (let ((file (expand-file-name ".git"))
-          parent-dir)
-      (while (and (not (file-exists-p file))
-                  (progn
-                    (setq parent-dir
-                          (file-name-directory
-                           (directory-file-name
-                            (file-name-directory file))))
-                    ;; Give up if we are already at the root dir.
-                    (not (string= (file-name-directory file)
-                                  parent-dir))))
-        ;; Move up to the parent dir and try again.
-        (setq file (expand-file-name ".git" parent-dir)))
-      ;; If we found a change log in a parent, use that.
-      (if (file-exists-p file)
-          (let ((regexp (funcall dired-omit-regexp-orig))
-                (omitted-files
-                 (shell-command-to-string "git clean -d -x -n")))
-            (if (= 0 (length omitted-files))
-                regexp
-              (concat
-               regexp
-               (if (> (length regexp) 0)
-                   "\\|" "")
-               "\\("
-               (mapconcat
-                #'(lambda (str)
-                    (concat
-                     "^"
-                     (regexp-quote
-                      (substring str 13
-                                 (if (= ?/ (aref str (1- (length str))))
-                                     (1- (length str))
-                                   nil)))
-                     "$"))
-                (split-string omitted-files "\n" t)
-                "\\|")
-               "\\)")))
-        (funcall dired-omit-regexp-orig)))))
-
-(use-package dired-toggle
-  :bind ("C-c ~" . dired-toggle)
-  :preface
-  (defun my-dired-toggle-mode-hook ()
-    (interactive)
-    (visual-line-mode 1)
-    (setq-local visual-line-fringe-indicators '(nil right-curly-arrow))
-    (setq-local word-wrap nil))
-  :hook (dired-toggle-mode . my-dired-toggle-mode-hook))
-
-(use-package dired-x
-  :after dired)
-
-; For describe-unbound-keys
-;;(use-package unbound)
-
-(use-package misc ;; Provided with Emacs.
-;;  (global-set-key [S-f4] 'copy-from-above-command)
-  :bind ("S-<f4>" . copy-from-above-command)
-          ;; Copy ARG characters - default to end of line.
-)
+;;Interface Enhancement 界面增强
 
 ;; http://endlessparentheses.com/faster-pop-to-mark-command.html
 ;; When popping the mark, continue popping until the cursor
@@ -695,8 +2041,8 @@
 (use-package recentf
   :init
   ;; Must come before mode is loaded, else my recent file not loaded.
-;  (setq recentf-save-file "~/.recentf")
-  (setq recentf-save-file (concat (getenv "HOME") "/.recentf"))
+    (setq recentf-save-file "~/.recentf")
+ ;   (setq recentf-save-file (concat (getenv "HOME") "/.recentf"))
   :bind ("M-0" . recentf-open-files)
   :config
   ;; http://www.xsteve.at/prg/emacs/power-user-tips.html
@@ -777,8 +2123,6 @@
 ;; (require 'gitconfig-mode)
 ;; (require 'gitignore-mode)
 
-
-
 ;; -----------------------------------------------------------------
 
 ;; Can't get this to work.  Nothing specfically on this found via Google.
@@ -789,26 +2133,7 @@
 ;; (define-key (current-global-map) "\C-c&" 'reftex-view-crossref)
 ; (define-key global-map "\C-c&" nil)
 
-(use-package yasnippet
-  :ensure t 
-;;:demand t  ;;覆盖包的的延迟，强制进行加载， 即使有:bind 也不会再延迟
-  :diminish yas-minor-mode
-  :bind (("C-c y d" . yas-load-directory)
-         ("C-c y i" . yas-insert-snippet)
-         ("C-c y f" . yas-visit-snippet-file)
-         ("C-c y n" . yas-new-snippet)
-         ("C-c y t" . yas-tryout-snippet)
-         ("C-c y l" . yas-describe-tables)
-         ("C-c y g" . yas/global-mode)
-         ("C-c y m" . yas/minor-mode)
-         ("C-c y a" . yas-reload-all)
-         ("C-c y x" . yas-expand))
-   :bind (:map yas-keymap
-         ("C-i" . yas-next-field-or-maybe-expand))
-   :mode ("/\\.emacs\\.d/snippets/" . snippet-mode)
-   ;;:config
-   ;;(global-yasnippet 1);;报错
- )
+
 ; -------------------------------------------------------------------
 ;; ;; Navigate use-package definitions in .emacs.
 ;; ;; http://irreal.org/blog/?p=3979
@@ -823,17 +2148,7 @@
 ;;                "\\(^\\s-*(use-package +\\)\\(\\_<.+\\_>\\)" 2)))
 ;;   (add-hook 'emacs-lisp-mode-hook #'jcs-use-package))
 
-;; ----------------------------------------------------
 
-(use-package avy
-  :bind* ("C-." . avy-goto-char-timer)
-  :config
-  (avy-setup-default))
-
-(use-package avy-zap
-  :bind (("M-z" . avy-zap-to-char-dwim)
-         ("M-Z" . avy-zap-up-to-char-dwim)))
-		 
 ;; ----------------------------------------------------
                                         ;
 ;; http://oremacs.com/2015/05/22/define-word/
@@ -1170,186 +2485,8 @@ Emacs buffers are those whose name starts with *."
 ;;   (elfeed-org)
 ;;   (setq rmh-elfeed-org-files (list "~/Dropbox/org/elfeed.org")))
 
-;; -------------------------------------------------
-;; Hydra  
+ 
 
-;; (add-to-list 'load-path "~/dropbox/elisp/hydra")
-(use-package hydra
-  :config
-  (global-set-key (kbd "C-x m") 'hydra-major/body)
-  (global-set-key (kbd "<f3>")   'hydra-bib-etc/body)
-  (global-set-key (kbd "C-<f3>") 'hydra-dired/body)
-)
-
-(defhydra hydra-major (:color blue :columns 4)
-  "major-mode"
-  ("b" bibtex-mode "bibtex")
-  ("l" latex-mode "latex")
-  ("o" org-mode "org")
-  ("s" lisp-mode "lisp")
-  ("t" text-mode "text")
-  ("c" 'toggle-truncate-lines "tog-trunc-lines")
-  ("f" auto-fill-mode "auto-fill")
-  ("h" html-mode "html")
-  ("m" message-mode "msg")
-  ("n" narrow-or-widen-dwim "narw-wide") 
-  ("r" read-only-mode "read-only")
-  ("u" linum-mode "lin-num")
-  ("q" nil "cancel")
-)
-(defhydra hydra-bib-etc (:color blue :columns 4)
-  "bib"
-  ("<f3>" helm-bibtex "helm-bibtex")
-  ("<f4>" helm-resume "helm-resume")
-  ("b"
-   (lambda () (interactive) (dired "~/bib"))
-   "bib")
-  ("d"
-   (lambda () (interactive) (dired "~/texmf/bibtex/bib"))
-   "texmf/bib")
-  ("c"
-   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/cut.bib"))
-   "cut")
-  ("l"
-   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/la.bib"))
-    "la")
-  ("h"
-   (lambda () (interactive) (find-file "~/texmf/bibtex/bib/njhigham.bib"))
-   "higham")
-   ("m"
-    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/misc.bib"))
-    "misc")
-   ("e"
-    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/ode.bib"))
-    "ode")
-  ("o"
-    (lambda () (interactive) (switch-to-buffer "*org*"))
-    "org*")
-   ("s"
-    (lambda () (interactive) (find-file "~/texmf/bibtex/bib/strings.bib"))
-    "strings")
-   ("x"
-    (lambda () (interactive) (switch-to-buffer "*scratch*"))
-    "scratch*")
-   ("t"
-    (lambda () (interactive) (switch-to-buffer "*text*"))
-    "text*")
-   ("z" scratch "scratch-make")
-)
-
-(defhydra hydra-dired (:color blue)
-   "dired"
-  ("m"
-   (lambda () (interactive) (dired "~/memo"))
-   "memo")
-  ("t"
-   (lambda () (interactive) (dired "~/tex"))
-   "tex")
-  ("b"
-   (lambda () (interactive) (dired "~/matlab"))
-   "matlab")
- ;; ("d"
-  ;; (lambda () (interactive) (dired "~/dropbox"))
-  ;; "dropbox")
-  ("h"
-   (lambda () (interactive) (dired "~/"))
-   "home")
-)
-
-(global-set-key (kbd "M-<f5>")   'hydra-zoom/body)
-(defhydra hydra-zoom (:color red)
-    "zoom"
-    ("g" text-scale-increase "in")
-    ("l" text-scale-decrease "out")
-    ("r" (text-scale-adjust 0) "reset")
-    ;; ("r" (lambda () (interactive) (text-scale-adjust 0)) "reset")
-    ("q" nil "quit"))
-
-;; http://ericjmritz.name/2015/10/14/some-personal-hydras-for-gnu-emacs/
-(defhydra hydra-move-org (:color red :columns 3)
-  "Org movements"
-  ("n" outline-next-visible-heading "next heading")
-  ("p" outline-previous-visible-heading "prev heading")
-  ("N" org-forward-heading-same-level "next heading at same level")
-  ("P" org-backward-heading-same-level "prev heading at same level")
-  ("u" outline-up-heading "up heading")
-  ("g" org-goto "goto" :exit t))
-(global-set-key (kbd "M-<f9>") 'hydra-move-org/body)
-
-;; Hydra for modes that toggle on and off
-(global-set-key
- (kbd "C-x t")
- (defhydra toggle (:color blue)
-   "toggle"
-   ("a" abbrev-mode "abbrev")
-   ("s" flyspell-mode "flyspell")
-   ("d" toggle-debug-on-error "debug")
-   ("c" fci-mode "fCi")
-   ("f" auto-fill-mode "fill")
-   ("t" toggle-truncate-lines "truncate")
-   ("w" whitespace-mode "whitespace")
-   ("q" nil "cancel")))
-
-;; Hydra for navigation
-(global-set-key
- (kbd "C-x j")
- (defhydra gotoline 
-   ( :pre (linum-mode 1)
-	  :post (linum-mode -1))
-   "goto"
-   ("t" (lambda () (interactive)(move-to-window-line-top-bottom 0)) "top")
-   ("b" (lambda () (interactive)(move-to-window-line-top-bottom -1)) "bottom")
-   ("m" (lambda () (interactive)(move-to-window-line-top-bottom)) "middle")
-   ("e" (lambda () (interactive)(end-of-buffer)) "end")
-   ("c" recenter-top-bottom "recenter")
-   ("n" next-line "down")
-   ("p" (lambda () (interactive) (forward-line -1))  "up")
-   ("g" goto-line "goto-line")
-   ))
-
-;; Hydra for some org-mode stuff
-(global-set-key
- (kbd "C-c t")
- (defhydra hydra-global-org (:color blue)
-   "Org"
-   ("t" org-timer-start "Start Timer")
-   ("s" org-timer-stop "Stop Timer")
-   ("r" org-timer-set-timer "Set Timer") ; This one requires you be in an orgmode doc, as it sets the timer for the header
-   ("p" org-timer "Print Timer") ; output timer value to buffer
-   ("w" (org-clock-in '(4)) "Clock-In") ; used with (org-clock-persistence-insinuate) (setq org-clock-persist t)
-   ("o" org-clock-out "Clock-Out") ; you might also want (setq org-log-note-clock-out t)
-   ("j" org-clock-goto "Clock Goto") ; global visit the clocked task
-   ("c" org-capture "Capture") ; Don't forget to define the captures you want http://orgmode.org/manual/Capture.htmlhttp://orgmode.org/manual/Capture.html
-   ("l" (or )rg-capture-goto-last-stored "Last Capture")))
-   
-   (defhydra mz/hydra-elfeed ()
-   "filter"
-   ("c" (elfeed-search-set-filter "@6-months-ago +cs") "cs")
-   ("e" (elfeed-search-set-filter "@6-months-ago +emacs") "emacs")
-   ("d" (elfeed-search-set-filter "@6-months-ago +education") "education")
-   ("*" (elfeed-search-set-filter "@6-months-ago +star") "Starred")
-   ("M" elfeed-toggle-star "Mark")
-   ("A" (elfeed-search-set-filter "@6-months-ago") "All")
-   ("T" (elfeed-search-set-filter "@1-day-ago") "Today")
-   ("Q" bjm/elfeed-save-db-and-bury "Quit Elfeed" :color blue)
-   ("q" nil "quit" :color blue)
-   )
-   
-   (defhydra imalison:hydra-font
-  nil
-  "Font Settings"
-  ("-" imalison:font-size-decr "Decrease")
-  ("d" imalison:font-size-decr "Decrease")
-  ("=" imalison:font-size-incr "Increase")
-  ("+" imalison:font-size-incr "Increase")
-  ("i" imalison:font-size-incr "Increase")
-  ("h" imalison:set-huge-font-size "Huge")
-  ("a" imalison:appearance "Set Default Appearance")
-  ("f" set-frame-font "Set Frame Font")
-  ("t" helm-themes "Choose Emacs Theme")
-  ("0" imalison:font-size-reset "Reset to default size")
-  ("8" imalison:font-size-80chars "80 chars 3 columns font size"))
-   
    
 ;; -------------------------------------------------
 ;; --------------------------------------------------------
@@ -1417,155 +2554,7 @@ already narrowed."
     "pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
     "culpa qui officia deserunt mollit anim id est laborum."))
 
-;;----------------------------------------------
-;; Modified by NJH from
-;; https://plus.google.com/113859563190964307534/posts/SK1vqiG9jv5
-;; Doesn't work within expand-region, unfortunately.
-(defun select-text-in-dollars()
-(interactive)
-(let (b1 b2)
-(skip-chars-backward "^$")
-(setq b1 (point))
-(skip-chars-forward "^$")
-(setq b2 (point))
-(set-mark b1)
-))
-(add-hook 'LaTeX-mode-hook
-          '(lambda ()
-              (local-set-key (kbd "C-$") 'select-text-in-dollars)
-;;              (local-unset-key (kbd "C-c C-d")) ; Prefer date.
-;;              (define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error)
-	      ))
-;; Not sure why this doesn't work within the add-hook.
-(eval-after-load 'latex
-;;     '(define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error))
-   '(progn
-    (define-key LaTeX-mode-map (kbd "<S-C-f12>") 'TeX-next-error)
-    (local-unset-key "\C-c\C-d") ; Prefer date.
-    ))
 
-(add-hook 'LaTeX-mode-hook #'latex-extra-mode) ; Activate latex-extra
-;; Disable C-c C-u from latex-extra (prefer LaTeX-star-environment below).
-;; Next line seemed to wipe out latex-extra and reftex key bindings:
-;; (add-hook 'LaTeX-mode-hook '(lambda () (define-key latex-extra-mode-map "" nil)))
-;; So replaced by this:
-(add-hook 'LaTeX-mode-hook '(lambda () (define-key latex-extra-mode-map (kbd "C-c C-u") nil)))
-
-;; (add-hook 'LaTeX-mode-hook
-;; 	  '(lambda()
-;;      	     (local-unset-key (kbd "C-c C-d")) ; Prefer date.
-;; 	     ))
-
-;; ----------------------------------------------------------
-;; http://irreal.org/blog/?p=5591
-(use-package ace-link
-  :init (ace-link-setup-default)
-;;  :config (define-key org-mode-map (kbd "M-o") 'ace-link-org)
-;; Why does the define-key line fail on loading?
-)
-
-;; (add-to-list 'load-path "~/Dropbox/elisp/ace-jump-mode-master")
-(use-package ace-jump-mode)
-(define-key global-map (kbd "C-x SPC") 'ace-jump-mode)
-;; Default C-c SPC clashes with ORG mode.
-(global-set-key (kbd "M-a") 'ace-jump-word-mode)
-(global-set-key (kbd "M-c") 'ace-jump-char-mode)
-(global-set-key (kbd "M-l") 'ace-jump-line-mode)
-
-;; (add-to-list 'load-path "~/Dropbox/elisp/ace-jump-zap-master")
-(use-package ace-jump-zap)
-; dwim variants give standard zap or ace-jump-zap with C-u prefix.
-; http://sachachua.com/blog/series/emacs-kaizen/
-(global-set-key (kbd "M-z") 'ace-jump-zap-up-to-char-dwim)
-(global-set-key (kbd "M-Z") 'ace-jump-zap-to-char-dwim)
-;; Replacing:
-;; (global-set-key (kbd "M-z") 'zap-up-to-char)
-;; (global-set-key (kbd "M-Z") 'zap-to-char)  ;; default is M-z
-
-;; (add-to-list 'load-path "~/Dropbox/elisp/ace-jump-buffer")
-(use-package ace-jump-buffer)
-(global-set-key (kbd "M-b") 'ace-jump-buffer)
-(global-set-key (kbd "M-B") 'ace-jump-same-mode-buffers)
-
-;; http://whattheemacsd.com/init.el-03.html
-;; Save point position between sessions
-;; (require 'saveplace)
-;; (if (version< emacs-version "25.0")
-;;     (progn (setq-default save-place t))  ;; Emacs < 25.0)
-;;     (progn (save-place-mode t)))
-;; (setq-default save-place t)  ; Now seems needed in 25?
-;; Emacs >= 25.0
-;;(save-place-mode 1)
-;;(setq save-place-file "~/dropbox/.places")
-
-;; ----------------------------------------------------------
-;; From http://lumiere.ens.fr/~guerry/u/emacs.el
-(add-hook 'emacs-lisp-mode-hook 'turn-on-orgstruct++)
-(add-hook 'mail-mode-hook 'turn-on-orgstruct++)
-;; http://pragmaticemacs.com/emacs/use-org-mode-tables-and-structures-in-emails-and-elsewhere/
-(add-hook 'mail-mode-hook 'turn-on-orgtbl)
-;;----------------------------------------------
-
-;;(use-package multiple-cursors
-;;  :load-path "~/Dropbox/elisp/multiple-cursors-master"
- ;; :bind (("C-S-m"       . mc/edit-lines)
- ;;        ("C->"         . mc/mark-next-like-this)
- ;;        ("C-<"         . mc/mark-previous-like-this)
- ;;        ("C-*"         . mc/mark-all-like-this)
- ;;        ("C-M-m"       . mc/mark-more-like-this)  ; MATLAB overrides this in Windows!
- ;;        ("C-c C-<"     . mc/mark-all-like-this))
-;;)
-
-(use-package wrap-region
-;;  :load-path "~/Dropbox/elisp/wrap-region"
-  ;; Deferred loading caused by next line stops package working
-  ; until mode turned off then on again!
-  ; :commands wrap-region-mode
-  :diminish wrap-region-mode
-  :config
-  (wrap-region-add-wrappers
-   '(("*" "*" nil org-mode)
-     ("~" "~" nil org-mode)
-     ("/" "/" nil org-mode)
-     ("=" "=" "+" org-mode)
-     ("_" "_" nil org-mode)
-     ("$" "$" nil (org-mode latex-mode))
-     ("[" "]")
-     ("(" ")")
-     ("`" "'")
-    ))
-    (wrap-region-global-mode t)
-    (wrap-region-mode t)
-    ;; (wrap-region-add-wrapper "$" "$" nil 'latex-mode)
-    ;; (wrap-region-add-wrapper "[" "]")
-    ;; (wrap-region-add-wrapper "(" ")")
-    ;; (wrap-region-add-wrapper "`" "'")
-)
-
-(use-package expand-region
-;;  :load-path "~/Dropbox/elisp/expand-region.el-master"
-;;  :commands wrap-region-mode
-  :bind (("C-@"  . er/expand-region)
-         ("C-~" .  er/contract-region))
-  :init
-  ;; Trying :init because with :config this is done after LaTeX mode loaded.
-  (defun er/add-latex-mode-expansions ()
-  (make-variable-buffer-local 'er/try-expand-list)
-  (setq er/try-expand-list (append
-                            er/try-expand-list
-                            '(LaTeX-mark-environment
-                              ))))
-  (add-hook 'LaTeX-mode-hook 'er/add-latex-mode-expansions)
-
-  (defun er/add-text-mode-expansions ()
-    (make-variable-buffer-local 'er/try-expand-list)
-    (setq er/try-expand-list (append
-                              er/try-expand-list
-                              '(mark-paragraph
-                                mark-page))))
-
-  (add-hook 'text-mode-hook 'er/add-text-mode-expansions)
-)
 
 ;;----------------------------------------------
 ;; popup tips
@@ -1674,8 +2663,7 @@ Works in Microsoft Windows, Mac OS X, Linux."
 ;; (add-to-list 'custom-theme-load-path "~/Dropbox/elisp/emacs-color-theme-solarized-master")
 ;; (load-theme 'solarized-dark t)
 
-(setq cursor-type 'bar)
-(show-paren-mode 1)
+
 
 ;; Initial frame size.
 ;; Seems this must come after the above, else window is shorter!
@@ -1733,17 +2721,7 @@ Works in Microsoft Windows, Mac OS X, Linux."
         (width . 81) (height . 48)
         )))
 
-;; ----- Enable Line and Column Numbering
-;; Show line-number in the mode line
-(line-number-mode 1)
-;; Show column-number in the mode line
-(column-number-mode 1)
 
-;; Use spaces instead of tabs.
-(setq-default indent-tabs-mode nil)
-
-;; Keep point at the same screen position when scrolling.
-(setq scroll-preserve-screen-position 1)
 
 ;; Turn on font-lock mode to color text in certain modes.
 (global-font-lock-mode t)
@@ -1780,24 +2758,7 @@ Works in Microsoft Windows, Mac OS X, Linux."
      (progn
        (list (line-beginning-position) (line-beginning-position 2)) ) ) ))
 
-;; Commands from windmove.el.
-;; Don't use C-S-*, as that is an Org mode key sequence.
-(global-set-key [C-M-left]  'windmove-left)      ; move to left window
-(global-set-key [C-M-right] 'windmove-right)     ; move to right window
-(global-set-key [C-M-up]    'windmove-up)        ; move to upper window
-(global-set-key [C-M-down]  'windmove-down)      ; move to downer window
 
-;; http://www.reddit.com/r/emacs/comments/gjqki/is_there_any_way_to_tell_emacs_to_not/c1o26uk
-(defun toggle-sticky-buffer-window ()
-  "Toggle whether this window is dedicated to this buffer."
-  (interactive)
-  (set-window-dedicated-p
-   (selected-window)
-   (not (window-dedicated-p (selected-window))))
-  (if (window-dedicated-p (selected-window))
-      (message "Window is now dedicated.")
-    (message "Window is no longer dedicated.")))
-(global-set-key [M-f2] 'toggle-sticky-buffer-window)
 
 ;; Let minibuffer grow for ido
 ;; http://stackoverflow.com/questions/1775898/emacs-disable-line-truncation-in-minibuffer-only
@@ -1812,101 +2773,6 @@ Works in Microsoft Windows, Mac OS X, Linux."
 ;; (add-to-list 'load-path "~/Dropbox/elisp/ibuffer-vc-master")
 (use-package ibuffer-vc)
 
-;; Ido mode.
-;; http://www.masteringemacs.org/articles/2010/10/10/introduction-to-ido-mode/
-(ido-mode 1)
-(setq ido-enable-flex-matching t)
-(setq ido-everywhere t)
-(setq ido-create-new-buffer 'always)
-(setq ido-enable-tramp-completion nil)
-(setq ido-max-directory-size 1000000)
-
-(setq ido-use-filename-at-point 'guess)  ;; Great on URL!
-(setq ido-use-url-at-point t)
-(setq ido-use-virtual-buffers t)         ;; Uses old buffers from recentf.
-
-;; This doesn't seem to have any effect.  Time order is better, anyway?
-(setq ido-file-extensions-order '(".tex" ".m" ".bib" ".txt" ".emacs"))
-
-;; For Mac: ignore .DS_Store files with ido mode
-(add-to-list 'ido-ignore-files "\\.DS_Store")
-
-;; http://whattheemacsd.com/
-;; Just press ~ to go home when in ido-find-file.
-(add-hook 'ido-setup-hook
- (lambda ()
-   ;; Go straight home
-   (define-key ido-file-completion-map
-     (kbd "~")
-     (lambda ()
-       (interactive)
-       (if (looking-back "/")
-           (insert "~/")
-         (call-interactively 'self-insert-command))))))
-
-;; isearch
-;; http://www.masteringemacs.org/articles/2011/07/20/searching-buffers-occur-mode/
-;; To enter Occur from an isearch (instead of default M-s o).
-(define-key isearch-mode-map (kbd "C-o") 'isearch-occur)
-
-;; Search backwards and forwards after an initial isearch.
-(global-set-key (kbd "<kp-subtract>") 'isearch-repeat-backward)
-(global-set-key (kbd "<kp-add>")      'isearch-repeat-forward)
-
-;; Ctrl-return exits isearch at start of string (return: end of string).
-;; http://www.emacswiki.org/emacs/ZapToISearch
-(defun isearch-exit-other-end (rbeg rend)
-  "Exit isearch, but at the other end of the search string.
-This is useful when followed by an immediate kill."
-  (interactive "r")
-  (isearch-exit)
-  (goto-char isearch-other-end))
-
-(define-key isearch-mode-map [(control return)] 'isearch-exit-other-end)
-
-;; http://irreal.org/blog/?p=2731,
-;; http://demonastery.org/2013/04/emacs-narrow-to-region-indirect/
-(defun narrow-to-region-indirect-buffer (start end)
-  (interactive "r")
-  (with-current-buffer (clone-indirect-buffer
-                        (generate-new-buffer-name
-                         (concat (buffer-name) "-indirect-"
-                                 (number-to-string start) "-"
-                                 (number-to-string end)))
-                        'display)
-    (narrow-to-region start end)
-    (deactivate-mark)
-    (goto-char (point-min))))
-;; (define-key global-map (kbd "C-x n b") 'narrow-to-region-indirect-buffer)
-
-(defun prelude-google ()
-  "Googles a region, if any, or prompts for a Google search string."
-  (interactive)
-  (browse-url
-   (concat
-    "http://www.google.com/search?ie=utf-8&oe=utf-8&q="
-    (if mark-active
-        (buffer-substring (region-beginning) (region-end))
-      (read-string "Google: ")))))
-; (global-set-key (kbd "C-x C-g") 'prelude-google)
-(global-set-key (kbd "M-g M-g") 'prelude-google)
-(global-set-key (kbd "M-g g")   'prelude-google)
-
-(defun google-scholar ()
-  "Googles a region, if any, or prompts for a Google search string."
-  (interactive)
-  (browse-url
-   (concat
-    "http://www.google.com/scholar?ie=utf-8&oe=utf-8&q="
-    (if mark-active
-        (buffer-substring (region-beginning) (region-end))
-      (read-string "Google Scholar: ")))))
-
-(global-set-key (kbd "M-g M-s") 'google-scholar)
-(global-set-key (kbd "M-g s")   'google-scholar)
-
-(global-set-key (kbd "M-g M-l") 'goto-line)
-(global-set-key (kbd "M-g l")   'goto-line)
 
 ;; -----------------------------------------------------------------
 (defun xah-select-text-in-quote ()
@@ -2226,39 +3092,6 @@ With argument ARG, do this that many times."
 (global-set-key (kbd "TAB") 'smart-tab)
 
 
-;; ---------------------------------------------------
-;; I've added the fullscreen, which works better, but it
-;; restores window to less than full height.
-;; weather from wttr.in
-(use-package wttrin
-  :ensure t
-  :commands (wttrin)
-  :init
-  (setq wttrin-default-cities '("Manchester")))
-
-;;advise wttrin to save frame arrangement
-;;requires frame-cmds package
-(defun bjm/wttrin-save-frame ()
-  "Save frame and window configuration and then expand frame for wttrin."
-  ;;save window arrangement to a register
-  (window-configuration-to-register :pre-wttrin)
-  (delete-other-windows)
-  ;;save frame setup and resize
-  (save-frame-config)
-  (toggle-frame-fullscreen)
-  ;; (set-frame-width (selected-frame) 130)
-  ;; (set-frame-height (selected-frame) 48)
-  )
-(advice-add 'wttrin :before #'bjm/wttrin-save-frame)
-
-(defun bjm/wttrin-restore-frame ()
-  "Restore frame and window configuration saved prior to launching wttrin."
-  (interactive)
-  (jump-to-frame-config-register)
-  (jump-to-register :pre-wttrin)
-  )
-(advice-add 'wttrin-exit :after #'bjm/wttrin-restore-frame)
-;; ---------------------------------------------------
 
 
 ;; ---------------------------------------------------
@@ -2390,120 +3223,9 @@ With arg, repeat; negative arg -N means kill back to Nth start of sentence."
 (define-key isearch-mode-map (kbd "<backspace>") 'mydelete)
 
 ;;------------------------
-;; (add-to-list 'load-path "~/dropbox/elisp/switch-window-master")
-(use-package switch-window)
-(global-set-key (kbd "C-x o") 'switch-window)
 
-;; (add-to-list 'load-path "~/dropbox/elisp/ace-window-master")
-(use-package ace-window)
-(global-set-key [f2]          'ace-window)
 
-;; Quicker window splitting
-(global-set-key (kbd "C-M-0") 'delete-window) ; was digit-argument
-(global-set-key (kbd "M-1")   'delete-other-windows) ; was digit-argument
-; (global-set-key (kbd "M-u")   'delete-other-windows) ; u for "unique"
-(global-set-key (kbd "M-2")   'split-window-vertically) ; was digit-argument
-(global-set-key (kbd "M-3")   'split-window-horizontally) ; was digit-argument
-; (global-set-key [f2]          'other-window)
 
-(global-set-key (kbd "C-x ,") 'shrink-window)
-(global-set-key (kbd "C-x .") 'enlarge-window) ; was set-fill-prefix
-
-;; Different from C-M-0 when more than 2 windows.
-(global-set-key [C-f2]
-  '(lambda () (interactive) (other-window 1) (delete-other-windows)))
-
-(global-set-key [C-f12]      'list-matching-lines)
-(global-set-key [M-C-f12]    'toggle-frame-fullscreen)
-
-;; Use M-f5 Hydra instead now
-;; (global-set-key [S-C-f12]    'text-scale-adjust)
-
-;;; * Flyspell: spell-checking.
-
-(global-set-key [f10]        'query-replace)
-;; (global-set-key [S-f10]      'ispell-buffer)
-;;(global-set-key [C-f10]      'flyspell-region)  ;; Default paragraph?
-;;(global-set-key [C-S-f10]    'flyspell-buffer)
-;;(global-set-key [S-f10]      'flyspell-auto-correct-word)
-;; There is no "previous error" command!
-;;(global-set-key [M-f10]      'flyspell-goto-next-error)
-
-;;(setq ispell-dictionary "american")   ; Set the default dictionary.
-
-;; To give Mac same mouse button behavior as Windows:
-;; https://joelkuiper.eu/spellcheck_emacs
-(if (system-is-mac)
-(eval-after-load "flyspell"
-  '(progn
-     (define-key flyspell-mouse-map [down-mouse-3] #'flyspell-correct-word)
-     (define-key flyspell-mouse-map [mouse-3] #'undefined))))
-
-;; Not sure why local-unset-key trick doesn't work.  This does the job:
-;; http://stackoverflow.com/questions/16084022/emacs-flyspell-deactivate-c-key-binding
-;;(eval-after-load "flyspell"
- ;; '(define-key flyspell-mode-map (kbd "C-c $") nil)) ;; Prefer Org-mode's key.
-
-;; http://stackoverflow.com/questions/6860750/how-to-enable-flyspell-mode-in-emacs-for-all-files-and-all-major-modes
-;; Turn flyspell on in all modes.
-;;(add-hook 'text-mode-hook 'flyspell-mode)
-;;(add-hook 'emacs-lisp-mode-hook 'flyspell-mode)  ;; For *scratch* mainly. OK?
-;;(add-hook 'prog-mode-hook 'flyspell-prog-mode)
-
-;; ;; Enable flyspell in various modes.
-;; BibTeX sets flyspell-mode in later hook.
-;; (add-hook 'text-mode-hook 'flyspell-mode)
-;; (add-hook 'org-mode-hook 'flyspell-mode)
-;; ;; Enable for tex-mode.
-;; (add-hook 'latex-mode-hook 'flyspell-mode)
-;; ;; Or if you use AUCTeX for latex.
-;; (add-hook 'LaTeX-mode-hook 'flyspell-mode)
-;; (add-hook 'Lisp-mode-hook 'flyspell-mode)
-;; (add-hook 'lisp-mode-hook 'flyspell-mode)
-;; (add-hook 'matlab-mode-hook 'flyspell-mode)
-
-;; http://pragmaticemacs.com/emacs/jump-back-to-previous-typo/
-;; Move point to previous spelling error.
-;; Based on code by hatschipuh at http://emacs.stackexchange.com/a/14912/2017
-;;(defun flyspell-goto-previous-error (arg)
-;;  "Go to arg previous spelling error."
- ;; (interactive "p")
- ;; (while (not (= 0 arg))
- ;;   (let ((pos (point))
- ;;         (min (point-min)))
- ;;     (if (and (eq (current-buffer) flyspell-old-buffer-error)
-  ;;             (eq pos flyspell-old-pos-error))
- ;;         (progn
-  ;;          (if (= flyspell-old-pos-error min)
-                ;; goto beginning of buffer
-  ;;              (progn
-  ;;                (message "Restarting from end of buffer")
-  ;;                (goto-char (point-max)))
-   ;;           (backward-word 1))
-  ;;          (setq pos (point))))
-      ;; seek the next error
-   ;;   (while (and (> pos min)
-      ;;            (let ((ovs (overlays-at pos))
-       ;;                 (r '()))
-      ;;              (while (and (not r) (consp ovs))
-      ;;                (if (flyspell-overlay-p (car ovs))
-      ;;                    (setq r t)
-      ;;                  (setq ovs (cdr ovs))))
-      ;;              (not r)))
-      ;;  (backward-word 1)
-      ;;  (setq pos (point)))
-      ;; save the current location for next invocation
-     ;; (setq arg (1- arg))
-     ;; (setq flyspell-old-pos-error pos)
-     ;; (setq flyspell-old-buffer-error (current-buffer))
-    ;;  (goto-char pos)
-    ;;  (if (= pos min)
-    ;;      (progn
-    ;;        (message "No more miss-spelled word!")
-    ;;;        (setq arg 0))
-    ;;    (forward-word)))))
-;; global-set-key [M-S-f10]    'flyspell-correct-word-before-point)
-;;global-set-key [M-S-f10]    'flyspell-goto-previous-error)
 
 ;; ---------------------------------------
 ;; (define-key ctl-x-map "\C-i" #'endless/ispell-word-then-abbrev)
@@ -2652,8 +3374,8 @@ If region is active, apply to active region instead."
    (interactive)
    (transpose-chars 1)
    (backward-char 2))
-(global-set-key [f11] 'transpose-chars-forward)
-(global-set-key [f12] 'transpose-chars-backward)
+;;(global-set-key [f11] 'transpose-chars-forward)
+;;(global-set-key [f12] 'transpose-chars-backward)
 ;; Note that f12 is different from C-t, which moves point forwards.
 
 ;; NB: find-file used. load-file is only for .el files.
@@ -2822,35 +3544,35 @@ the character typed."
 ;; Thunderbird email buffers.
 (add-to-list 'auto-mode-alist '("\\.eml$" . mail-mode))
 
-;;(use-package magit
-;;  :defer t
-;; :diminish magit-auto-revert-mode
+(use-package magit
+  :defer t
+ :diminish magit-auto-revert-mode
 
-;;  :bind ("C-M-g" . magit-status)
-;;  :preface
+ :bind ("C-M-g" . magit-status)
+  :preface
 
-;;  :init
-;;  (add-hook 'magit-mode-hook 'hl-line-mode)  ; Hilite current line.
+ :init
+ (add-hook 'magit-mode-hook 'hl-line-mode)  ; Hilite current line.
 
-;;  :config
-;;  (setq magit-commit-all-when-nothing-staged t)
+  :config
+  (setq magit-commit-all-when-nothing-staged t)
 
-  ;; full screen magit-status
+   full screen magit-status
   ;; http://whattheemacsd.com/setup-magit.el-01.html
-  ;;(defadvice magit-status (around magit-fullscreen activate)
-  ;;  (window-configuration-to-register :magit-fullscreen)
+  (defadvice magit-status (around magit-fullscreen activate)
+   (window-configuration-to-register :magit-fullscreen)
   ;;  ad-do-it
-  ;;  (delete-other-windows))
- ;; (defun magit-quit-session ()
- ;;   "Restores the previous window configuration and kills the magit buffer"
- ;;   (interactive)
- ;;   (kill-buffer)
- ;;   (jump-to-register :magit-fullscreen))
+   (delete-other-windows))
+   (defun magit-quit-session ()
+     "Restores the previous window configuration and kills the magit buffer"
+      (interactive)
+      (kill-buffer)
+      (jump-to-register :magit-fullscreen))
 
- ;;   (bind-key "q" 'magit-quit-session magit-status-mode-map)
-    ; (define-key magit-status-mode-map (kbd "q") 'magit-quit-session)
+     (bind-key "q" 'magit-quit-session magit-status-mode-map)
+     (define-key magit-status-mode-map (kbd "q") 'magit-quit-session)
 
-;;)
+ )
 
 ;; (add-to-list 'load-path "~/Dropbox/elisp/magit-master")
 ;; (autoload 'magit-status "magit" nil t)
@@ -2860,49 +3582,19 @@ the character typed."
 
 ;; ;; full screen magit-status
 ;; ;; http://whattheemacsd.com/setup-magit.el-01.html
-;; (defadvice magit-status (around magit-fullscreen activate)
-;;   (window-configuration-to-register :magit-fullscreen)
+   (defadvice magit-status (around magit-fullscreen activate)
+    (window-configuration-to-register :magit-fullscreen)
 ;;   ad-do-it
-;;   (delete-other-windows))
-;; (defun magit-quit-session ()
-;;   "Restores the previous window configuration and kills the magit buffer"
-;;   (interactive)
-;;   (kill-buffer)
-;;   (jump-to-register :magit-fullscreen))
-;; (define-key magit-status-mode-map (kbd "q") 'magit-quit-session)
-; -----------------------------------------------------------------------
+    (delete-other-windows))
+   (defun magit-quit-session ()
+    (interactive)
+    (kill-buffer)
+    (jump-to-register :magit-fullscreen))
+ ; -----------------------------------------------------------------------
 
 
-;; --------------------------------------------------------
-;; MATLAB mode (http://www.emacswiki.org/emacs/MatlabMode)
 
-(use-package matlab-load
-;;  :load-path "~/Dropbox/elisp/matlab-emacs"
-  :mode ("\\.m\\'" . matlab-mode)
-  ; Prev line replaces: (add-to-list 'auto-mode-alist '("\\.m$" . matlab-mode))
-  :init (autoload 'matlab-mode "matlab" "Matlab Editing Mode" t)
-  :commands (matlab-load)
-  :config
-    (matlab-load)
-    (setq matlab-indent-function t)
-)
 
-;; (add-to-list 'load-path "~/Dropbox/elisp/matlab-emacs")
-;; (require 'matlab-load)
-;; ; (load-library "matlab-load")
-;; ;; (autoload 'matlab-mode "matlab" "Matlab Editing Mode" t)
-
-;; (add-to-list
-;;  'auto-mode-alist
-;;  '("\\.m$" . matlab-mode))
-;; (setq matlab-indent-function t)
-;; ;; (setq matlab-shell-command "matlab")
-;; ;; --------------------------------------------------------
-
-;; Abbreviations
-;;(setq abbrev-file-name "~/Dropbox/emacs_abbrev_defs")
-(setq save-abbrevs t)              ;; save abbrevs when files are saved
-(setq-default abbrev-mode t)
 
 ;; -----------------------------
 ;; Tidy (clean) up non-ASCII characters
@@ -2988,16 +3680,11 @@ the character typed."
 ))
 
 
- (use-package auto-complete
-  :ensure t
-  :init
-  (progn
-    (ac-config-default)
-    (global-auto-complete-mode t)
-    ))
+ 
 	
 	
-
+;;(use-package ess-site  ;not include melpa
+;;  :commands R)
 
 ;; Single space after period denotes end of sentence.
 (setq sentence-end-double-space nil)
@@ -3026,333 +3713,14 @@ the character typed."
 (untabify (point) (point-max))))
 
 
-;;;-------------completion---------------------
-;;     company           ; the ultimate code completion backend
-;;     ivy               ; a search engine for love and life
-      ;helm              ; the *other* search engine for love and life
-      ;ido               ; the other *other* search engine...
-	  
-;; the ultimate code completion backend
-(use-package company
-   :ensure t
-   :config
-      (setq company-idle-delay 0)
-      (setq company-minimum-prefix-length 3)
-)   
-(global-company-mode t)
 
-;; Ivy and Swiper
-;; require 'ivy)
-(use-package counsel
-  :ensure t
-)
-(use-package swiper
-  :ensure try
-  :config
-  (progn
-    (ivy-mode 1)
-;;    (setq enable-recursive-minibuffers t)  ;; Dangerous?
-    (setq ivy-use-virtual-buffers t
-          ivy-count-format "%d/%d ")
-    (global-set-key (kbd "C-S-s") 'swiper)
-    (global-set-key (kbd "<f6>") 'ivy-resume)
-    (global-set-key (kbd "<f6>") 'ivy-resume)
-    (global-set-key (kbd "C-x C-b") 'ivy-switch-buffer)
-    (global-set-key (kbd "C-S-f") 'counsel-find-file)
-    (global-set-key (kbd "C-c g") 'counsel-git)
-    ))
+
+
 
 	
  
 ;; --------------------------------------------------------
-;; AUCTeX stuff.
-
-
-;;from jwiegley's config 
-(use-package auctex
-  ;;:load-path "~/elisp/auctex-12.1.1/auctex"   ;;unsuccessful
-  :mode ("\\.tex\\'" . TeX-latex-mode)
-  :config
-  (defun latex-help-get-cmd-alist ()    ;corrected version:
-    "Scoop up the commands in the index of the latex info manual.
-   The values are saved in `latex-help-cmd-alist' for speed."
-    ;; mm, does it contain any cached entries
-    (if (not (assoc "\\begin" latex-help-cmd-alist))
-        (save-window-excursion
-          (setq latex-help-cmd-alist nil)
-          (Info-goto-node (concat latex-help-file "Command Index"))
-          (goto-char (point-max))
-          (while (re-search-backward "^\\* \\(.+\\): *\\(.+\\)\\." nil t)
-            (let ((key (buffer-substring (match-beginning 1) (match-end 1)))
-                  (value (buffer-substring (match-beginning 2)
-                                           (match-end 2))))
-              (add-to-list 'latex-help-cmd-alist (cons key value))))))
-    latex-help-cmd-alist)
-
-  (add-hook 'TeX-after-compilation-finished-functions
-            #'TeX-revert-document-buffer))
-
-
-
-;;加载cdlatex后，（导致启动慢） 
-;;(load-file "~/.emacs.d/lisp/cdlatex.el") ;;设置加载路径(add-to-list 'load-path "~/lisp")，此行就不需要了，如果以此行设置，启动时慢
-(add-hook 'LaTeX-mode-hook 'turn-on-cdlatex)   ; with AUCTeX LaTeX mode
-
-
-
-;; PDF previewers.
-(if (system-is-windows)
-(progn
-;;(setq TeX-view-program-list '(("Sumatra" "\"SumatraPDF.exe\" -reuse-instance %o")))
- (setq TeX-view-program-list '(("Sumatra" "\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance %o")))
-;; (setq TeX-view-program-list '(("Sumatra" "Sumatra_emacs.bat %o") ))
-(setq TeX-view-program-selection '((output-pdf "Sumatra") (output-dvi "dviout")))
-))
-
-
-   
-;; Following didn't work when put within previous progn.
-;; http://william.famille-blum.org/blog/static.php?page=static081010-000413
-;;(if (system-is-windows)
-;;(require 'sumatra-forward)   ; For forward search.
-;;)
-
-;;; * LaTeX
-(add-hook 'LaTeX-mode-hook
-          (lambda ()
-            (add-to-list 'TeX-command-list '("XeLaTeX" "%`xelatex%(mode)%' %t" TeX-run-TeX nil t))
-            (setq TeX-command-default "XeLaTeX")
-            (setq TeX-save-query  nil )
-            (setq TeX-show-compilation t)))
-
-;; From https://github.com/tmalsburg/helm-bibtex/issues/121#issuecomment-237981605
-(defun bibtex-completion-open-pdf-of-entry-at-point ()
-  (interactive)
-  (save-excursion
-    (bibtex-beginning-of-entry)
-    (when (looking-at bibtex-entry-maybe-empty-head)
-;      (bibtex-completion-open-pdf (bibtex-key-in-head)))))
-       (bibtex-completion-open-pdf (list (bibtex-key-in-head))))))
-;; Change suggested by https://github.com/tmalsburg/helm-bibtex/issues/169#issuecomment-269950953
-
-;; Bib file notes: one file per entry.
-(setq bibtex-completion-notes-path "~/texmf/bibtex/bib/notes")
-;; Trivial modification of the previous function to edit note for bib entry.
-(defun bibtex-completion-njh-edit-note ()
-  (interactive)
-  (save-excursion
-    (bibtex-beginning-of-entry)
-    (when (looking-at bibtex-entry-maybe-empty-head)
-;;      (bibtex-completion-edit-notes (bibtex-key-in-head)))))
-      (bibtex-completion-edit-notes (list( bibtex-key-in-head))))))
-
-(defun my-bibtex-mode-hook ()
-   (flyspell-mode)
-   (defun bibtex-flyspell-entry ()
-     "Check BibTeX entry for spelling errors."
-     (interactive)
-     (flyspell-region (save-excursion (bibtex-beginning-of-entry))
-                    (save-excursion (bibtex-end-of-entry))))
-   (local-set-key [C-S-f10]    'bibtex-flyspell-entry)
-   (defun bibtex-created-date ()
-     (interactive)
-     (insert (format-time-string "created = \"%Y.%m.%d\",")))
-   (local-set-key (kbd "C-c d") 'bibtex-created-date)
-   (defun bibtex-updated-date ()
-     (interactive)
-     (insert (format-time-string "updated = \"%Y.%m.%d\"")))
-   (local-set-key (kbd "C-c u") 'bibtex-updated-date)
-   (local-set-key (kbd "C-c p") 'bibtex-completion-open-pdf-of-entry-at-point)
-   (local-set-key (kbd "C-c n") 'bibtex-completion-njh-edit-note)
-   (defun mynote ()
-      "Insert mynote field in Bib file."
-      (interactive)
-      (insert "mynote = \"Not printed.\","))
-)
-(add-hook 'bibtex-mode-hook 'my-bibtex-mode-hook)
-
-;; My function based on the obvious commands.
-(defun njh-open-cite-pdf ()
-  (interactive)
-  (save-excursion
-  (reftex-view-crossref) (switch-window)
-   (bibtex-completion-open-pdf-of-entry-at-point)(delete-window)))
-(defun njh-open-cite-note ()
-  (interactive)
-  (save-excursion
-  (reftex-view-crossref) (switch-window)
-   (bibtex-completion-njh-edit-note) ))
-(add-hook 'LaTeX-mode-hook '(lambda ()
-          (local-set-key (kbd "C-c p") 'njh-open-cite-pdf)
-          (local-set-key (kbd "C-c n") 'njh-open-cite-note)
-          ))
-(add-hook 'org-mode-hook '(lambda ()
-          (local-set-key (kbd "C-c p") 'njh-open-cite-pdf)
-          (local-set-key (kbd "C-c n") 'njh-open-cite-note)
-          ))
-
-;; BibTeX mode.
-(require 'bibtex)
-(setq bibtex-string-files '("strings.bib"))
-;; Does removing trailing / on next line cure
-;; bibtex-parse-buffers-stealthily errors?
-(setq bibtex-string-file-path '("~/texmf/bibtex/bib"))
-(setq bibtex-field-delimiters 'double-quotes)
-;; Can't match my key exactly - compromise on fixed # chars from each name.
-; (setq bibtex-autokey-names-stretch 3);  Use up to 4 names in total
-; (setq bibtex-autokey-name-length 4);    Max no chars to use.
-(setq bibtex-autokey-names-stretch 0);  Use up to 4 names in total
-(setq bibtex-autokey-name-length nil);    Max no chars to use.
-(setq bibtex-autokey-titlewords 0);     Don't use title in key.
-(setq bibtex-autokey-titlewords-stretch 0);
-(setq bibtex-text-indentation 0) ; No indentation for content.
-
-;; From comment at https://nickhigham.wordpress.com/2016/01/06/managing-bibtex-files-with-emacs/
-(defun bibtex-generate-autokey ()
-  (let* ((bibtex-autokey-names nil)
-  (bibtex-autokey-year-length 2)
-  (bibtex-autokey-name-separator "\0")
-  (names (split-string (bibtex-autokey-get-names) "\0"))
-  (year (bibtex-autokey-get-year))
-  (name-char (cond ((= (length names) 1) 4) ((= (length names) 2) 2) (t 1)))
-  (existing-keys (bibtex-parse-keys)) key)
-  (setq names (mapconcat (lambda (x)
-  (substring x 0 name-char))
-  names ""))
-  (setq key (format "%s%s" names year))
-  (let ((ret key))
-  (loop for c from ?a to ?z
-  while (assoc ret existing-keys)
-  do (setq ret (format "%s%c" key c)))
-  ret)))
-
-;; This is for inserting text of citation within a tex file.
-;; Use in TeX mode and others (with different keys).
-(defun my-cite()
-   (interactive)
-   (let ((reftex-cite-format "%a, %t, %j %v, %p, %e: %b, %u, %s, %y %<"))
-                           (reftex-citation)))
-;; Above reftex-cite-format string has same effect as "'locally" but
-;; with title added and author list not abbreviated.
-
-(defun my-cite-hook ()
-(local-set-key (kbd "C-c m") 'my-cite))
-
-(global-set-key (kbd "C-c [") 'reftex-citation) ;; For all modes.
-
-;; Customize BibTeX bibtex-clean-entry.
-;; That command doesn't work properly on the Mac - unclear why.
-;; E.g. https://github.com/pcdavid/config/blob/master/emacs/feature-latex.el
-;; (setq bibtex-entry-format
-;;       `(("opts-or-alts", "page-dashes", "required-fields",
-;;          "numerical-fields", "whitespace", "last-comma", "delimiter",
-;;          "unify-case", "sort-fields"
-;; )))
-(setq bibtex-entry-format
-      `(page-dashes required-fields
-         numerical-fields whitespace last-comma delimiters
-         unify-case sort-fields))
-
-(setq bibtex-field-delimiters 'double-quotes)
-(setq bibtex-entry-delimiters 'braces)
-
-;; I prefer closing brace on its own line after cleaning BibTeX entry.
-(setq bibtex-clean-entry-hook 'mybibtex-clean-extra)
-(defun mybibtex-clean-extra ()
-  "Move final right brace to a line of its own."
-  (progn (bibtex-end-of-entry) (left-char) (newline-and-indent)
-         (insert "      ")))
-
-;; These seem to work in LaTeX mode too, so no need to distinguish?
-(defun my-tex-mode-hook ()
-;; f5 saves file then runs LaTeX with no need to hit return.
-;; http://stackoverflow.com/questions/1213260/one-key-emacs-latex-compilation
-(local-set-key (kbd "<f5>") (kbd "C-x C-s C-c C-c C-j"))
-
-(if (system-is-mac)
-     ; Next line not really needed, since same as f5, but use it for
-     ; consistency between Mac and Windows.
-;     (local-set-key (kbd "<C-f5>") (kbd "C-x C-s C-c C-c C-j")))
-     (local-set-key (kbd "<C-f5>") (kbd "C-c C-v")))
-(if (system-is-windows)
-    (local-set-key (kbd "<C-f5>")  'sumatra-jump-to-line))
-
-(defun my-ref()
-  (interactive)
-  (insert "\\ref{}")
-  (backward-char))
-(local-set-key (kbd "C-c r") 'my-ref)
-(defun my-eqref()
-  (interactive)
-  (insert "\\eqref{}")
-  (backward-char))
-(local-set-key (kbd "C-c e") 'my-eqref)
-(local-set-key (kbd "C-c C-t C-c") `TeX-clean); Remove .log, .aux files etc.
-(setq TeX-clean-confirm nil);                   Don't ask for confirmation.
-(local-set-key (kbd "C-c m") 'my-cite)
-)
-(add-hook 'TeX-mode-hook 'my-tex-mode-hook)
-
-;; Add return after C-c C-j.
-(add-hook 'LaTeX-mode-hook
-	  (lambda ()
-	    (local-set-key "\C-c\C-j"
-          	   (lambda () (interactive)
-	           (LaTeX-insert-item) (TeX-newline)
-))))
-
-;; Command to run BibTeX directly.
-;; http://comments.gmane.org/gmane.emacs.auc-tex/925
-(add-hook 'LaTeX-mode-hook
-	  (lambda ()
-	    (local-set-key (kbd "C-c C-g")
-                (lambda () (interactive) (TeX-command-menu "BibTeX")))))
-
-;; Command to run LaTeX directly and force it always to run.
-(add-hook 'LaTeX-mode-hook
-	  (lambda ()
-	    (local-set-key (kbd "<S-f5>")
-                (lambda () (interactive) (TeX-command-menu "LaTeX")))
-; 	    (local-set-key (kbd "C-c C-a")
-;                (lambda () (interactive) (TeX-command-menu "LaTeX")))
-            (local-set-key (kbd "C-M-[") 'LaTeX-find-matching-begin)
-            (local-set-key (kbd "C-M-]") 'LaTeX-find-matching-end)
-            ))
-
-;; Check next function: is the backward sentence needed?
-;; It sometimes reformats the previous line!
-;; http://stackoverflow.com/questions/539984/how-do-i-get-emacs-to-fill-sentences-but-not-paragraphs
-(defun fill-sentence ()
-  (interactive)
-  (save-excursion
-    (or (eq (point) (point-max)) (forward-char))
-    (forward-sentence -1)
-;    (indent-relative t)
-    (let ((beg (point))
-          (ix (string-match "LaTeX" mode-name)))
-      (forward-sentence)
-      (if (and ix (equal "LaTeX" (substring mode-name ix)))
-          (LaTeX-fill-region-as-paragraph beg (point))
-        (fill-region-as-paragraph beg (point))))))
-(global-set-key (kbd "<f7>") 'fill-sentence)
-
-;; From comment at https://nickhigham.wordpress.com/2016/01/06/managing-bibtex-files-with-emacs/
-(defvar bp/bibtex-fields-ignore-list
-  '("keywords" "abstract" "file" "issn" "eprint" "issue_date"
-    "articleno" "numpages" "acmid"))
-(defun bp/bibtex-clean-entry-hook ()
-  (save-excursion
-  (let (bounds)
-  (when (looking-at bibtex-entry-maybe-empty-head)
-  (goto-char (match-end 0))
-  (while (setq bounds (bibtex-parse-field))
-  (goto-char (bibtex-start-of-field bounds))
-  (if (member (bibtex-name-in-field bounds)
-  bp/bibtex-fields-ignore-list)
-  (kill-region (caar bounds) (nth 3 bounds))
-  (goto-char (bibtex-end-of-field bounds))))))))
-(add-hook 'bibtex-clean-entry-hook 'bp/bibtex-clean-entry-hook)
-(global-set-key (kbd "<f7>") 'fill-sentence)
+;; 
 
 
 ;; Summing a column
@@ -3377,386 +3745,42 @@ the character typed."
   (setq n (replace-match "" nil nil n)))
   (string-to-number n))
 
-;;; * Org Mode
-;;(setq org-directory "~/Dropbox/org")
 
-(require 'ox-latex)
-;; extarticle allows font sizes 9, 14, 17, 20pt.
-(add-to-list 'org-latex-classes
-  '("extarticle"
-     "\\documentclass[14pt]{extarticle}"
-     ("\\section{%s}" . "\\section*{%s}")
-     ("\\subsection{%s}" . "\\subsection*{%s}")
-     ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
-     ("\\paragraph{%s}" . "\\paragraph*{%s}")
-     ("\\subparagraph{%s}" . "\\subparagraph*{%s}"))
-    )
-
-;;  http://katherine.cox-buday.com/blog/2015/03/14/writing-specs-with-org-mode/
-(add-to-list 'org-latex-classes
-'("memoir"
-"\\documentclass{memoir}
-[DEFAULT-PACKAGES]
-[PACKAGES]
-[EXTRA]"
-("\\section{%s}" . "\\section*{%s}")
-("\\subsection{%s}" . "\\subsection*{%s}")
-("\\subsubsection{%s}" . "\\subsubsection*{%s}")
-("\\paragraph{%s}" . "\\paragraph*{%s}")
-("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
-
-;; This turns off default packages, one of which (textcomp) messes up
-;; bullets in itemize.  May only need this when using Lucida.
-;; Don't think I can specify packages to load here.
-;; [2017-12-12 Tue 20:24] Added the \usepackage but they don't work!
-(add-to-list 'org-latex-classes
-'("basic"
-"\\documentclass[12pt]{extarticle}
-\\usepackage{a4}
-\\usepackage[hyphens]{url}
-\\usepackage{hyperref}
-\\usepackage{amssymb}
-[NO-DEFAULT-PACKAGES]
-[PACKAGES]
-[EXTRA]"
-("\\section{%s}" . "\\section*{%s}")
-("\\subsection{%s}" . "\\subsection*{%s}")
-("\\subsubsection{%s}" . "\\subsubsection*{%s}")
-("\\paragraph{%s}" . "\\paragraph*{%s}")
-("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
-
- 
-
-;; Next line seems needed to make org functions available outside org,
-;; before org has been invoked (C-c d above).
-;; (require 'ox-beamer)
-
-(setq org-default-notes-file (concat org-directory "/todo.org"))
-;; With just one file specified this file's contents specify the files.
-;; Explained in org.el, but not the manual.
-(setq org-agenda-files (concat org-directory "/agenda_files.txt"))
-
-;; http://orgmode.org/worg/org-tutorials/orgtutorial_dto.html
-(define-key global-map "\C-cl" 'org-store-link)
-(define-key global-map "\C-ca" 'org-agenda)
-;; iswitchb is now obsolete in Emacs 24.4:
-;; (define-key global-map "\C-cb" 'org-iswitchb)  ; ORG manual.
-(setq org-log-done t)  ;; Add time stamp when move to DONE state.
-;; To get ido completion (http://patchwork.newartisans.com/patch/84):
-(setq org-completion-use-ido t)
-(setq org-completion-use-iswitchb nil)
-(setq org-return-follows-link t)
-
-(setq org-src-fontify-natively t)   ;; http://irreal.org/blog/?p=671
-
-;; Causes problems! See notes.
-;; (setq org-list-allow-alphabetical t) ;; Allows "a)" numbering. And "A."!
-
-(define-key global-map (kbd "C-M-SPC") 'org-capture)  ; Was "\C-cc"
-(define-key global-map (kbd "C-M-=")
-   (lambda () (interactive) (org-capture nil "t")))  ; Create TODO.
-
-(add-hook 'org-mode-hook
-	  '(lambda()
-	     ;; (local-unset-key [C-S-left])  ; Prefer buffer-move (see above).
-	     ;; (local-unset-key [C-S-right])
-	     ;; (local-unset-key [C-S-up])
-	     ;; (local-unset-key [C-S-down])
-	     (local-set-key [M-S-up]   'move-line-up)
-	     (local-set-key [M-S-down] 'move-line-down)
-	     (local-unset-key (kbd "M-a")) ; Prefer Ace-jump.
-	     (local-unset-key (kbd "C-c [")) ; Prefer my-cite
-	     (local-unset-key (kbd "S-<return>")) ; Prefer smart-open-line.
-             (local-set-key (kbd "C-c &") 'reftex-view-crossref)
-;;	     (local-unset-key (kbd "C-]")) ; Prefer nothing
-;;             (local-set-key (kbd "<f5>") 'org-export-as-pdf)
-;; Latter line doesn't work in ORG 8.0.
-;             (local-set-key (kbd "<f5>") 'org-latex-export-to-pdf)
-           (local-set-key (kbd "<f5>")
-;;           (lambda () (interactive) (save-buffer) (org-latex-export-to-pdf)))
-           (lambda () (interactive) (save-buffer)
-                      (org-open-file (org-latex-export-to-pdf))))
-))
-
-;; Link abbrevations.
-(setq org-link-abbrev-alist
-       '(("doi" . "https://doi.org/")
-         ("google"   . "http://www.google.com/search?q=")
-        ))
-
-(defun my-insert-inactive-timestamp ()
-  (interactive)
-;  (beginning-of-line)
-;  (insert "   ")
-  (org-insert-time-stamp nil t t nil nil nil))
-(global-set-key (kbd "C-c d") 'my-insert-inactive-timestamp) ; Global!
-
-;; From http://doc.norang.ca/org-mode.html
-(defun my-insert-TODO ()
-  (interactive)
-  (insert "** TODO "))
-; (defun my-org-mode-hook ()
-;     (local-set-key (kbd "C-M-=") 'my-insert-TODO)) ; Override global setting.
-; (add-hook 'org-mode-hook 'my-org-mode-hook)
-; Could simply not get next hook to work with C-M-=!
-(add-hook 'org-mode-hook
-	  '(lambda()
-             (local-set-key (kbd "C-=") 'my-insert-TODO)
-	     ))
-
-; Go to top outline level.  Useful before org2blog-post-subtree.
-(defun my-top-level ()
-  (interactive)
-  (let ((current-prefix-arg '(9))) ; Assuming at most 9 levels in.
-  (call-interactively 'outline-up-heading)))
-;; (add-hook 'org-mode-hook
-;; 	  '(lambda()
-;;              (local-set-key (kbd "C-M-[") 'my-top-level)
-;; 	     ))
-; Make next keypress global, since I can't make C-M-... keypresses
-; local in ORG mode (same problem with 'my-insert-TODO).
-(global-set-key (kbd "C-M-u") 'my-top-level)
-(global-set-key [S-f11] 'org2blog/wp-post-subtree)
-
-;; This doesn't work when already at top level.
-;; (defun my-wp-post-subtree ()
-;;   "Move to top outline level then post"
-;;   (interactive)
-;;   (progn (my-top-level) (org2blog/wp-post-subtree)))
-;; (global-set-key [S-f11] 'my-wp-post-subtree)
-
-;; This is originally assigned to C-j. See how it goes.
-;; I want it so that lists easier to enter.
-;; Turned off, since has unwanted effects, e.g. in todo.org.
-;; Either turn on selectively or use C-j.
-;; (define-key org-mode-map (kbd "<return>") 'org-return-indent)
-
-(setq org-capture-templates
-   '(("t" "TODO" entry (file+headline (concat org-directory "/todo.org")
-;;                                       "Captures")
-                                       "General")
-       "* TODO %?\n  %U\n  %a" :prepend t :empty-lines 0)
-    ("e" "CLAIMED" entry (file+headline (concat org-directory "/todo.org")
-                                       "Expense claims")
-       "* %?\n  %U\n  %a" :prepend t :empty-lines 0)
-    ("i" "item" entry (file+headline (concat org-directory "/todo.org")
-                                       "General")
-       "* %?\n  %U\n  %a" :prepend t :empty-lines 0)
-))
-(setq org-reverse-note-order t)  ;; Refile at top instead of bottom.
-
-(setq org-todo-keywords
-           '((sequence "TODO(t!)" "WAITING(w!)" "|" "DONE(d!)")
-             (sequence "CLAIMED(c!)" "ON THE WAY(o!)" "|" "RECEIVED(r!)")
-             )
-)
-
-;; http://irreal.org/blog/?p=2029
-(add-to-list 'org-structure-template-alist
-             '("n" "#+BEGIN_COMMENT\n?\n#+END_COMMENT"
-               "<comment>\n?\n</comment>"))
-
-;; Now in Org 7.8.11 as org-table-transpose-table-at-point
-;; http://orgmode.org/worg/org-hacks.html
-;; (defun org-transpose-table-at-point ()
-;;   "Transpose orgmode table at point, eliminate hlines"
-;;   (interactive)
-;;   (let ((contents
-;;          (apply #'mapcar* #'list
-;;                 ;; remove 'hline from list
-;;                 (remove-if-not 'listp
-;;                                ;; signals error if not table
-;;                                (org-table-to-lisp)))))
-;;     (delete-region (org-table-begin) (org-table-end))
-;;     (insert (mapconcat (lambda(x) (concat "| " (mapconcat 'identity x " | " ) "  |\n" ))
-;;                        contents ""))
-;;     (org-table-align)))
-
-;; http://www.patokeefe.com/blog
-;; Modified by NJH.
-(defun orgtbl-to-latex-matrix (table params)
-  "Convert the Orgtbl mode TABLE to a LaTeX Matrix."
-  (interactive)
-  (let* ((params2
-          (list
-           :tstart (concat "\\[\n\\bmatrix{")
-           :tend "}\n\\]"
-           :lstart "" :lend " \\cr" :sep " & "
-           :efmt "%s%s" :hline "\\hline")))
-    (orgtbl-to-generic table (org-combine-plists params2 params))))
-
-(defun orgtbl-insert-matrix ()
-  "Insert a radio table template appropriate for this major mode."
-  (interactive)
-  (let* ((txt orgtbl-latex-matrix-string)
-         name pos)
-    (setq name (read-string "Table name: "))
-    (while (string-match "%n" txt)
-      (setq txt (replace-match name t t txt)))
-    (or (bolp) (insert "\n"))
-    (setq pos (point))
-    (insert txt)
-    (previous-line)
-    (previous-line)))
-
-(defcustom orgtbl-latex-matrix-string  "% BEGIN RECEIVE ORGTBL %n
-% END RECEIVE ORGTBL %n
-\\begin{comment}
-#+ORGTBL: SEND %n orgtbl-to-latex-matrix :splice nil :skip 0
-
-\\end{comment}\n"
-  "Template for the latex matrix orgtbl translator
-All occurrences of %n in a template will be replaced with the name of the
-table, obtained by prompting the user."
-  :type 'string
-  :group 'org-table)
-
-(if (system-is-windows)
-;; Open PDFs visited in Org-mode in Sumatra (not the default choice, Acrobat).
-;; http://stackoverflow.com/a/8836108/789593
-(add-hook 'org-mode-hook
-   '(lambda ()
-      (delete '("\\.pdf\\'" . default) org-file-apps)
-;;      (add-to-list 'org-file-apps '("\\.pdf\\'" . "d:\\bat\\sumatra_emacs.bat %s")))
-;;      (add-to-list 'org-file-apps '("\\.pdf\\'" . "\"C:/Program Files (x86)/SumatraPDF/SumatraPDF.exe\" -reuse-instance %s")))
-      (add-to-list 'org-file-apps '("\\.pdf\\'" . "\"C:/Program Files/SumatraPDF/SumatraPDF.exe\" -reuse-instance %s")))
-))
-
-;; Open PDFs in Skim instead of Acrobat.
-(if (system-is-mac)
-(add-hook 'org-mode-hook
-   '(lambda ()
-      (delete '("\\.pdf\\'" . default) org-file-apps)
-      (add-to-list 'org-file-apps '("\\.pdf\\'" . "skim %s")
-))))
-
-;; Mobile org
-;; Set to the name of the file where new notes will be stored
-;;(setq org-mobile-inbox-for-pull "~/dropbox/org/todo.org")
-;; Set to <your Dropbox root directory>/MobileOrg.
-;;(setq org-mobile-directory "~/Dropbox/Apps/MobileOrg")
-
-;; Activate additional Babel languages
-(org-babel-do-load-languages
- 'org-babel-load-languages
- '((calc . t)
-   ))
-
-;;; * Misc
-
-;; Useful functions for generating html from org, e.g. to paste into
-;; Wordpress.
-
-;; http://sachachua.com/blog/2014/10/publishing-wordpress-thumbnail-images-using-emacs-org2blog/
-;; http://pages.sachachua.com/.emacs.d/Sacha.html#sec-1-8-18-5
-(defun sacha/org-copy-region-as-html (beg end &optional level)
-  "Make it easier to copy code for Wordpress posts and other things."
-  (interactive "r\np")
-  (let ((org-export-html-preamble nil)
-        (org-html-toplevel-hlevel (or level 3)))
-    (kill-new
-     (org-export-string-as (buffer-substring beg end) 'html t))))
-
-(defun sacha/org-copy-subtree-as-html ()
-  (interactive)
-  (sacha/org-copy-region-as-html
-   (org-back-to-heading)
-   (org-end-of-subtree)))
-
-;; For Org to convert to doc.
-;; http://blog.binchen.org/posts/how-to-take-screen-shot-for-business-people-efficiently-in-emacs.html
-(setq org-odt-preferred-output-format "doc")
-
-;; This stops hitting return after a URL opening browser.
-(setq org-return-follows-link nil)
-
-;;(load-file "~/Dropbox/.emacs-mail-setup")
-
-;; http://www.howardism.org/Technical/Emacs/orgmode-wordprocessor.html
-(setq org-hide-emphasis-markers t)
-(add-to-list 'org-emphasis-alist
-             '("*" (:foreground "pink")
-               ))
-
-;; http://pragmaticemacs.com/emacs/prevent-comments-from-breaking-paragraphs-in-org-mode-latex-export/
-;; Remove comments from org document for use with export hook
-;; https://emacs.stackexchange.com/questions/22574/orgmode-export-how-to-prevent-a-new-line-for-comment-lines
-(defun delete-org-comments (backend)
-  (loop for comment in (reverse (org-element-map (org-element-parse-buffer)
-                    'comment 'identity))
-    do
-    (setf (buffer-substring (org-element-property :begin comment)
-                (org-element-property :end comment))
-          "")))
-;; Add to export hook.
-(add-hook 'org-export-before-processing-hook 'delete-org-comments)
-
-;; Execute this from scratch buffer to remove the hook:
-;; (remove-hook 'org-export-before-processing-hook 'delete-org-comments)
-
-;; http://pragmaticemacs.com/emacs/highlight-latex-text-in-org-mode/
-(setq org-highlight-latex-and-related '(latex))
-
-;; For converting org tables to csv in place.
-;; Useful if have several table separated by text.
-;; https://stackoverflow.com/questions/17717483/howto-convert-org-mode-table-to-original-tabbed-format
-(defun org-table-transform-in-place ()
-  "Just like `ORG-TABLE-EXPORT', but instead of exporting to a
-  file, replace table with data formatted according to user's
-  choice, where the format choices are the same as
-  org-table-export."
-  (interactive)
-  (unless (org-at-table-p) (user-error "No table at point"))
-  (org-table-align)
-  (let* ((format
-      (completing-read "Transform table function: "
-               '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
-                 "orgtbl-to-html" "orgtbl-to-generic"
-                 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
-                 "orgtbl-to-unicode")))
-     (curr-point (point)))
-    (if (string-match "\\([^ \t\r\n]+\\)\\( +.*\\)?" format)
-    (let ((transform (intern (match-string 1 format)))
-          (params (and (match-end 2)
-               (read (concat "(" (match-string 2 format) ")"))))
-          (table (org-table-to-lisp
-              (buffer-substring-no-properties
-               (org-table-begin) (org-table-end)))))
-      (unless (fboundp transform)
-        (user-error "No such transformation function %s" transform))
-      (save-restriction
-        (with-output-to-string
-          (delete-region (org-table-begin) (org-table-end))
-          (insert (funcall transform table params) "\n")))
-      (goto-char curr-point)
-      (beginning-of-line)
-      (message "Tranformation done."))
-      (user-error "Table export format invalid"))))
 
 
 ;;; * Local Variables
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(anzu-deactivate-region t)
- '(anzu-mode-lighter "")
- '(anzu-replace-threshold 50)
- '(anzu-replace-to-string-separator " => ")
- '(anzu-search-threshold 1000)
- '(package-selected-packages
-   (quote
-    (auto-yasnippet ace-pinyin goto-chg wttrin char-menu dired-quick-sort elfeed-goodies elfeed try yasnippet wrap-region which-key wgrep wc-mode use-package switch-window smex shell-pop shrink-whitespace ripgrep ox-pandoc matlab-mode macrostep latex-extra imenu-anywhere ibuffer-vc hydra helm-bibtex helm git-timemachine diminish deft define-word counsel clippy bug-hunter browse-kill-ring bind-key auctex anzu ace-window ace-link ace-jump-zap ace-jump-mode ace-jump-buffer))))
+
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  )
- 
- 
 
+;;https://github.com/jwiegley/dot-emacs/blob/80f70631c03b2dd4f49741478453eaf1a2fe469b/init.el 
+(use-package pdf-tools
+  :magic ("%PDF" . pdf-view-mode)
+  :config
+  (dolist
+      (pkg
+       '(pdf-annot pdf-cache pdf-dev pdf-history pdf-info pdf-isearch
+                   pdf-links pdf-misc pdf-occur pdf-outline pdf-sync
+                   pdf-util pdf-view pdf-virtual))
+    (require pkg))
+  (pdf-tools-install))
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ace-isearch-function (quote ace-jump-word-mode))
+ '(ace-isearch-input-length 6)
+ '(ace-isearch-jump-delay 0.25)
+ '(ace-isearch-use-jump (quote printing-char))
+ '(package-selected-packages
+   (quote
+    (ivy-dired-history ivy-bibtex ivy ox-latex yasnippet wttrin wrap-region which-key wgrep-ag wc-mode use-package undo-tree try switch-window swap-buffers smex smartparens shrink-whitespace shell-pop ripgrep phi-search-mc pdf-tools ox-pandoc mmm-mode mc-extras matlab-mode markdown-mode magit macrostep latex-extra imenu-anywhere ibuffer-vc     guide-key goto-chg git-timemachine expand-region elfeed dired-toggle dired-quick-sort diminish deft define-word counsel company cnfonts clippy char-menu bug-hunter browse-kill-ring avy-zap auto-complete auto-compile auctex-latexmk anzu ace-window ace-link ace-jump-zap ace-jump-buffer ace-isearch))))
  ;; Local Variables:
 ;; eval: (orgstruct-mode 1).
 ;; orgstruct-heading-prefix-regexp: ";;; ";
