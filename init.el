@@ -80,10 +80,10 @@
       '(
         ("orgmode" . "https://orgmode.org/elpa/")
         ;("melpa" . "http://melpa.org/packages/")
-		("gnu" . "http://elpa.gnu.org/packages/");  Only for AucTeX.
+		;("gnu" . "http://elpa.gnu.org/packages/");  Only for AucTeX.
 		("melpa-cn" . "http://elpa.emacs-china.org/melpa/")
         ;("org-cn"   . "http://elpa.emacs-china.org/org/")
-        ;("gnu-cn"   . "http://elpa.emacs-china.org/gnu/")
+        ("gnu-cn"   . "http://elpa.emacs-china.org/gnu/");  Only for AucTeX.
         ))
 (package-initialize)
 
